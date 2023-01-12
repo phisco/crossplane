@@ -11,7 +11,7 @@ require (
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20220517194345-84eb52633e96
 	github.com/imdario/mergo v0.3.12
 	github.com/pkg/errors v0.9.1
-	github.com/sirupsen/logrus v1.8.1
+	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/afero v1.8.0
 	k8s.io/api v0.24.0
 	k8s.io/apiextensions-apiserver v0.23.0
@@ -138,7 +138,7 @@ require (
 	golang.org/x/net v0.0.0-20220516155154-20f960328961 // indirect
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5 // indirect
 	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29 // indirect
-	golang.org/x/sys v0.0.0-20220513210249-45d2b4557a2a // indirect
+	golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8 // indirect
 	golang.org/x/term v0.0.0-20220411215600-e5f449aeb171 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20220411224347-583f2d630306 // indirect
