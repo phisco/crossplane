@@ -1,0 +1,62 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base"
+  ],
+  "prConcurrentLimit": 5,
+  "baseBranches": ["master","release-1.8","release-1.9","release-1.10"],
+  "ignorePaths": ["design/**"],
+  "postUpdateOptions": ["gomodTidy"],
+  "recreateClosed": true,
+  "regexManagers": [
+    {
+      "fileMatch": ["^.github/workflows/ci.yml$"],
+       "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>.*?) depName=(?<depName>.*?)( versioning=(?<versioning>.*?))?\\s.*?_VERSION='(?<currentValue>.*)'$"
+      ],
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchDatasources": [
+        "go"
+      ],
+      "groupName": "kubernetes non-major packages",
+      "groupSlug": "kubernetes-go",
+      "matchDepNames": [
+        "k8s.io/client-go"
+      ],
+      "allowedVersions": "<1.0"
+    }, {
+      "matchDatasources": [
+        "go"
+      ],
+      "groupName": "kubernetes non-major packages",
+      "groupSlug": "kubernetes-go",
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "matchPackagePrefixes": [
+        "k8s.io",
+        "sigs.k8s.io"
+      ]
+    }, {
+      "matchPackagePatterns": [
+        "*"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-minor-patch"
+    }, {
+      "matchDepTypes": [
+        "action"
+      ],
+      "pinDigests": true
+    }
+  ]
+}
