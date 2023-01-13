@@ -8,6 +8,15 @@
   "ignorePaths": ["design/**"],
   "postUpdateOptions": ["gomodTidy"],
   "recreateClosed": true,
+  "regexManagers": [
+    {
+      "fileMatch": ["^.github/workflows/ci.yml$"],
+       "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>.*?) depName=(?<depName>.*?)( versioning=(?<versioning>.*?))?\\s.*?_VERSION='(?<currentValue>.*)'$"
+      ],
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}"
+    }
+  ],
   "packageRules": [
     {
       "matchDatasources": [
@@ -16,14 +25,12 @@
       "groupName": "kubernetes packages",
       "groupSlug": "kubernetes-go",
       "matchPackagePatterns": [
-        "^k8s.io/*"
+        "^k8s.io/*",
+        "^sigs.k8s.io/*"
       ]
     }, {
       "matchDatasources": [
         "go"
-      ],
-      "excludePackagePatterns":[
-        "^k8s.io/*"
       ],
       "matchUpdateTypes": [
         "minor",
