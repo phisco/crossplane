@@ -22,8 +22,6 @@
       "matchDatasources": [
         "go"
       ],
-      "groupName": "kubernetes non-major packages",
-      "groupSlug": "kubernetes-go",
       "matchDepNames": [
         "k8s.io/client-go"
       ],
@@ -32,10 +30,8 @@
       "matchDatasources": [
         "go"
       ],
-      "groupName": "kubernetes non-major packages",
-      "groupSlug": "kubernetes-go",
+      "groupName": "kubernetes patches",
       "matchUpdateTypes": [
-        "minor",
         "patch"
       ],
       "matchPackagePrefixes": [
@@ -43,20 +39,49 @@
         "sigs.k8s.io"
       ]
     }, {
+      "matchDatasources": [
+        "go"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor"
+      ],
+      "matchPackagePrefixes": [
+        "k8s.io",
+        "sigs.k8s.io"
+      ]
+    }, {
+      "matchDatasources": [
+        "go"
+      ],
       "matchPackagePatterns": [
         "*"
+      ],
+      "excludePackagePrefixes": [
+        "k8s.io",
+        "sigs.k8s.io"
       ],
       "matchUpdateTypes": [
         "minor",
         "patch"
       ],
-      "groupName": "all non-major dependencies",
-      "groupSlug": "all-minor-patch"
+      "groupName": "all non-major go dependencies"
     }, {
+      "matchDepTypes": [
+        "action"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "all non-major github action",
+      "pinDigests": true
+    },{
       "matchDepTypes": [
         "action"
       ],
       "pinDigests": true
     }
+
   ]
 }
