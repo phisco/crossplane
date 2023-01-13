@@ -13,6 +13,7 @@ on:
 
 env:
   # Common versions
+  # renovate: datasource=repology depName=homebrew/go versioning=loose
   GO_VERSION: '1.19'
 
   # Common users. We can't run a step 'if secrets.AWS_USR != ""' but we can run
