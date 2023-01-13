@@ -183,7 +183,7 @@ jobs:
           platforms: all
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@8c0edbc76e98fa90f69d9a2c020dcb50019dc325 # v2
         with:
           version: ${{ env.DOCKER_BUILDX_VERSION }}
           install: true
@@ -245,7 +245,7 @@ jobs:
           platforms: all
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@8c0edbc76e98fa90f69d9a2c020dcb50019dc325 # v2
         with:
           version: ${{ env.DOCKER_BUILDX_VERSION }}
           install: true
