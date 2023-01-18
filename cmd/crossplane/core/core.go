@@ -176,6 +176,9 @@ func (c *startCommand) Run(s *runtime.Scheme, log logging.Logger) error { //noli
 		if err := (&apiextensionsv1.CompositeResourceDefinition{}).SetupWebhookWithManager(mgr); err != nil {
 			return errors.Wrap(err, "cannot setup webhook for compositeresourcedefinitions")
 		}
+		if err := (&apiextensionsv1.Composition{}).SetupWebhookWithManager(mgr); err != nil {
+			return errors.Wrap(err, "cannot setup webhook for compositeresourcedefinitions")
+		}
 	}
 
 	return errors.Wrap(mgr.Start(ctrl.SetupSignalHandler()), "Cannot start controller manager")
