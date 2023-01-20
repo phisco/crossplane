@@ -36,6 +36,10 @@
       "depNameTemplate": "golangci/golangci-lint"
     }
   ],
+// PackageRules disabled below should be enabled in case of vulnerabilities
+  "vulnerabilityAlerts": {
+    "enabled": true
+  },
   "packageRules": [
     {
 // We need to ignore k8s.io/client-go older versions as they switched to
@@ -76,14 +80,33 @@
         "sigs.k8s.io"
       ]
     }, {
-// We want a single PR for all minor and patch bumps to non-kubernetes Go
-// dependencies
+// We want dedicated PRs for each bump to non-kubernetes Go dependencies, but
+// only if there are known vulnerabilities in the current version.
       "matchDatasources": [
         "go"
       ],
       "matchPackagePatterns": [
         "*"
       ],
+      "enabled": false,
+      "excludePackagePrefixes": [
+        "k8s.io",
+        "sigs.k8s.io"
+      ],
+      "matchUpdateTypes": [
+        "major",
+      ],
+    }, {
+// We want a single PR for all minor and patch bumps to non-kubernetes Go
+// dependencies, but only if there are known vulnerabilities in the current
+// version.
+      "matchDatasources": [
+        "go"
+      ],
+      "matchPackagePatterns": [
+        "*"
+      ],
+      "enabled": false,
       "excludePackagePrefixes": [
         "k8s.io",
         "sigs.k8s.io"
@@ -105,7 +128,7 @@
       "groupName": "all non-major github action",
       "pinDigests": true
     },{
-// We want dedicated PRs for major bumps to Github Actions
+// We want dedicated PRs for each major bump to Github Actions
       "matchDepTypes": [
         "action"
       ],
