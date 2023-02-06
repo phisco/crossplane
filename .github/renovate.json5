@@ -10,6 +10,8 @@
   "baseBranches": ["master","release-1.9","release-1.10","release-1.11"],
   "ignorePaths": ["design/**"],
   "postUpdateOptions": ["gomodTidy"],
+  "allowPostUpgradeCommandTemplating": true,
+  "allowedPostUpgradeCommands": ["^make gen-kustomize-crds$"],
 // By default renovate will auto detect whether semantic commits have been used
 // in the recent history and comply with that, we explicitly disable it
   "semanticCommits": "disabled",
@@ -97,6 +99,17 @@
         "sigs.k8s.io"
       ]
     }, {
+// We want to regenerate crds once controller-tools are updated
+      "matchDatasources": [
+        "go"
+      ],
+      "matchPackageNames": [
+        "sigs.k8s.io/controller-tools"
+      ],
+      "postUpgradeTasks": {
+        "commands": ["make gen-kustomize-crds"]
+      },
+    }, {
 // We want dedicated PRs for each minor and major bumps to kubernetes related
 // dependencies.
       "matchDatasources": [
@@ -176,5 +189,5 @@
       ],
       "enabled": false
     }
-  ]
+  ],
 }
