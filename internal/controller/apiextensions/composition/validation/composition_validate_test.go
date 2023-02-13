@@ -14,9 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package composite
+package validation
 
 import (
+	"github.com/crossplane/crossplane/apis/apiextensions/v1"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -24,8 +25,6 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
-
-	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 )
 
 func TestRejectMixedTemplates(t *testing.T) {

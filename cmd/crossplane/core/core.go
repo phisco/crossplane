@@ -18,6 +18,7 @@ limitations under the License.
 package core
 
 import (
+	"github.com/crossplane/crossplane/internal/controller/apiextensions/composition/validation"
 	"time"
 
 	"github.com/alecthomas/kong"
@@ -176,7 +177,11 @@ func (c *startCommand) Run(s *runtime.Scheme, log logging.Logger) error { //noli
 		if err := (&apiextensionsv1.CompositeResourceDefinition{}).SetupWebhookWithManager(mgr); err != nil {
 			return errors.Wrap(err, "cannot setup webhook for compositeresourcedefinitions")
 		}
-		if err := (&apiextensionsv1.Composition{}).SetupWebhookWithManager(mgr); err != nil {
+		validator := validation.ClientCompositionValidator{}
+		if err := validator.SetupWithManager(mgr); err != nil {
+			return err
+		}
+		if err := (&apiextensionsv1.Composition{}).SetupWebhookWithManager(mgr, &validator); err != nil {
 			return errors.Wrap(err, "cannot setup webhook for compositeresourcedefinitions")
 		}
 	}

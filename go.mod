@@ -39,7 +39,10 @@ require (
 	kernel.org/pub/linux/libs/security/libcap/cap v1.2.66
 )
 
-require github.com/evanphx/json-patch/v5 v5.6.0 // indirect
+require (
+	github.com/asaskevich/govalidator v0.0.0-20190424111038-f61b66f89f4a // indirect
+	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
+)
 
 require (
 	cloud.google.com/go/compute v1.6.1 // indirect
