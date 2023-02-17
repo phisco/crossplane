@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
+	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composed"
 	composite2 "github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composite"
@@ -31,6 +32,7 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/validation"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -53,6 +55,37 @@ var (
 		CompositionValidatorFn(RejectAnonymousTemplatesWithFunctions),
 		CompositionValidatorFn(RejectFunctionsWithoutRequiredConfig),
 	}
+
+	metadataSchema = apiextensions.JSONSchemaProps{
+		Type: "object",
+		Properties: map[string]apiextensions.JSONSchemaProps{
+			"name": {
+				Type: "string",
+			},
+			"namespace": {
+				Type: "string",
+			},
+			"labels": {
+				Type: "object",
+				AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
+					Schema: &apiextensions.JSONSchemaProps{
+						Type: "string",
+					},
+				},
+			},
+			"annotations": {
+				Type: "object",
+				AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
+					Schema: &apiextensions.JSONSchemaProps{
+						Type: "string",
+					},
+				},
+			},
+			"uid": {
+				Type: "string",
+			},
+		},
+	}
 )
 
 // A CompositionValidatorInterface validates the supplied Composition.
@@ -62,6 +95,8 @@ type CompositionValidatorInterface interface {
 
 // A CompositionValidatorFn validates the supplied Composition.
 type CompositionValidatorFn func(comp *v1.Composition) error
+
+type gvkValidationMap map[schema.GroupVersionKind]apiextensions.CustomResourceValidation
 
 // Validate the supplied Composition.
 func (fn CompositionValidatorFn) Validate(comp *v1.Composition) error {
@@ -205,26 +240,37 @@ func (c *ClientCompositionValidator) ValidateCreate(ctx context.Context, obj run
 		return err
 	}
 
+	fmt.Println("HERE: validationMode detected: ", validationMode)
+
 	// Validate general assertions
 	if err := defaultCompositionValidationChain.Validate(comp); err != nil {
+		fmt.Errorf("HERE: defaultCompositionValidationChain failed: %v", err)
 		return err
 	}
+	fmt.Println("HERE: defaultCompositionValidationChain validated")
 
 	c.validationMode = validationMode
 
 	// Get schema for Composite Resource Definition defined by comp.Spec.CompositeTypeRef
-	gvk, err := typeReferenceToGVK(&comp.Spec.CompositeTypeRef)
+
+	compositeResGVK := schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
+		comp.Spec.CompositeTypeRef.Kind)
+
+	fmt.Println("HERE: compositeResGVK detected: ", compositeResGVK)
+	compositeCrdValidation, err := c.getCRDValidationForGVK(ctx, &compositeResGVK)
 	if err != nil {
+		fmt.Println("HERE: getCRDValidationForGVK failed: ", err)
 		return err
 	}
-	compositeCrd, err := c.getCRDVerisonForGVK(ctx, gvk)
-	if err != nil {
-		return err
-	}
+	fmt.Println("HERE: compositeCrdValidation detected: ", compositeCrdValidation)
 	// Get schema for all Managed Resources in comp.Spec.Resources[*].Base
 	managedResourcesCRDs, err := c.getBasesCRDs(ctx, comp.Spec.Resources)
 	if err != nil {
 		return err
+	}
+	fmt.Println("HERE: managedResourcesCRDs detected: ", managedResourcesCRDs)
+	if compositeCrdValidation != nil {
+		managedResourcesCRDs[compositeResGVK] = *compositeCrdValidation
 	}
 
 	// dereference all patches first
@@ -232,50 +278,73 @@ func (c *ClientCompositionValidator) ValidateCreate(ctx context.Context, obj run
 	if err != nil {
 		return err
 	}
+	fmt.Println("HERE: resources detected: ", resources)
 
 	composedResources := make([]runtime.Object, len(resources))
 
 	// Validate all patches given the schemas above
 	for i, resource := range resources {
-		// get schema for resource.Base from managedResourcesCRDs
-		gvk := resource.Base.Object.GetObjectKind().GroupVersionKind()
-		crd := managedResourcesCRDs[gvk]
+		fmt.Println("HERE: resource detected: ", resource)
 		// validate patches using it and the compositeCrd resource
-
 		cd := composed.New()
 		if err := json.Unmarshal(resource.Base.Raw, cd); err != nil {
 			return err
 		}
-		compositeRes := composite2.New(composite2.WithGroupVersionKind(gvk))
+		composedGVK := cd.GetObjectKind().GroupVersionKind()
+		patchCtx := patchContext{
+			gvkCRDValidation:          managedResourcesCRDs,
+			compositionValidationMode: validationMode,
+			composedGVK:               composedGVK,
+			compositeGVK:              compositeResGVK,
+		}
 		for _, patch := range resource.Patches {
-			if err := validatePatch(patch, compositeCrd, &crd); err != nil {
+			fmt.Println("HERE: patch detected: ", patch)
+			if err := validatePatch(patch, &patchCtx); err != nil {
+				fmt.Println("HERE: validatePatch failed: ", err)
 				return err
 			}
+			compositeRes := composite2.New(composite2.WithGroupVersionKind(compositeResGVK))
 
-			err := composite.ApplyToObjects(patch, compositeRes, cd, v1.PatchTypeFromCompositeFieldPath)
+			err := composite.Apply(patch, compositeRes, cd, v1.PatchTypeFromCompositeFieldPath)
 			if err != nil {
+				fmt.Println("HERE: ApplyToObjects failed: ", err)
 				return nil
 			}
 		}
 		composedResources[i] = cd
 	}
+	fmt.Println("HERE: composedResources detected: ", composedResources)
 
 	// Validate Rendered Composed Resources from Composition
 
 	for _, renderedComposed := range composedResources {
-		vs, _, err := validation.NewSchemaValidator(managedResourcesCRDs[renderedComposed.GetObjectKind().GroupVersionKind()].Schema)
+		fmt.Println("HERE: renderedComposed detected: ", renderedComposed)
+		crdV, ok := managedResourcesCRDs[renderedComposed.GetObjectKind().GroupVersionKind()]
+		if !ok {
+			if c.validationMode == v1.CompositionValidationModeStrict {
+				return errors.Errorf("No CRD validation found for rendered resource: %v", renderedComposed.GetObjectKind().GroupVersionKind())
+			}
+			fmt.Println("HERE: No CRD validation found for rendered resource: ", renderedComposed.GetObjectKind().GroupVersionKind())
+			continue
+		}
+		vs, _, err := validation.NewSchemaValidator(&crdV)
 		if err != nil {
+			fmt.Println("HERE: NewSchemaValidator failed: ", err)
 			return err
 		}
 		r := vs.Validate(renderedComposed)
 		if r.HasErrors() {
+			fmt.Println("HERE: renderedComposed validation failed: ", r.AsError())
 			return r.AsError()
 		}
 		if r.HasWarnings() {
+			fmt.Println("HERE: renderedComposed validation failed: ", errors.Errorf("warnings: %v", r.Warnings))
 			return errors.Errorf("warnings: %v", r.Warnings)
 		}
+		fmt.Println("HERE: renderedComposed validated: ", renderedComposed)
 	}
 
+	fmt.Println("HERE: ALL VALIDATED")
 	return nil
 }
 
@@ -306,49 +375,41 @@ func (c *ClientCompositionValidator) ValidateDelete(ctx context.Context, obj run
 	return nil
 }
 
-func (c *ClientCompositionValidator) getCRDVerisonForGVK(ctx context.Context, gvk *schema.GroupVersionKind) (*apiextensions.CustomResourceDefinitionVersion, error) {
+func (c *ClientCompositionValidator) getCRDValidationForGVK(ctx context.Context, gvk *schema.GroupVersionKind) (*apiextensions.CustomResourceValidation, error) {
 	crds := extv1.CustomResourceDefinitionList{}
 	if err := c.client.List(ctx, &crds, client.MatchingFields{"spec.group": gvk.Group}, client.MatchingFields{"spec.names.kind": gvk.Kind}); err != nil {
 		return nil, err
 	}
 	switch len(crds.Items) {
 	case 0:
-		return nil, fmt.Errorf("no CRDs found: %v", gvk)
+		if c.validationMode == v1.CompositionValidationModeStrict {
+			return nil, fmt.Errorf("no CRDs found: %v", gvk)
+		}
+		fmt.Println("HERE: no CRDs found, but ok: ", gvk)
+		return nil, nil
 	case 1:
+		fmt.Println("HERE: one CRD found: ", gvk)
 		crd := crds.Items[0]
 		internal := &apiextensions.CustomResourceDefinition{}
 		if err := extv1.Convert_v1_CustomResourceDefinition_To_apiextensions_CustomResourceDefinition(&crd, internal, nil); err != nil {
 			return nil, err
 		}
+		if v := internal.Spec.Validation; v != nil {
+			return v, nil
+		}
 		for _, version := range internal.Spec.Versions {
 			if version.Name == gvk.Version {
-				return &version, nil
+				return version.Schema, nil
 			}
 		}
 		return nil, fmt.Errorf("no CRD found for version: %v, %v", gvk, crd)
-	default:
-		return nil, fmt.Errorf("too many CRDs found: %v, %v", gvk, crds)
-	}
-	if len(crds.Items) == 1 {
 	}
 
-	return nil, fmt.Errorf("found too many crds, %v, %v", gvk, crds)
+	return nil, fmt.Errorf("too many CRDs found: %v, %v", gvk, crds)
 }
 
-func typeReferenceToGVK(ref *v1.TypeReference) (*schema.GroupVersionKind, error) {
-	gv, err := schema.ParseGroupVersion(ref.APIVersion)
-	if err != nil {
-		return nil, err
-	}
-	return &schema.GroupVersionKind{
-		Kind:    ref.Kind,
-		Group:   gv.Group,
-		Version: gv.Version,
-	}, nil
-}
-
-func (c *ClientCompositionValidator) getBasesCRDs(ctx context.Context, resources []v1.ComposedTemplate) (map[schema.GroupVersionKind]apiextensions.CustomResourceDefinitionVersion, error) {
-	gvkToCRDV := make(map[schema.GroupVersionKind]apiextensions.CustomResourceDefinitionVersion)
+func (c *ClientCompositionValidator) getBasesCRDs(ctx context.Context, resources []v1.ComposedTemplate) (gvkValidationMap, error) {
+	gvkToCRDV := make(gvkValidationMap)
 	for _, resource := range resources {
 		cd := composed.New()
 		if err := json.Unmarshal(resource.Base.Raw, cd); err != nil {
@@ -358,18 +419,133 @@ func (c *ClientCompositionValidator) getBasesCRDs(ctx context.Context, resources
 		if _, ok := gvkToCRDV[gvk]; ok {
 			continue
 		}
-		crdv, err := c.getCRDVerisonForGVK(ctx, &gvk)
+		crdv, err := c.getCRDValidationForGVK(ctx, &gvk)
 		if err != nil {
 			return nil, err
 		}
-		gvkToCRDV[gvk] = *crdv
+		if crdv != nil {
+			gvkToCRDV[gvk] = *crdv
+		}
 	}
 	return gvkToCRDV, nil
 }
 
-func validatePatch(patch v1.Patch, compositeTypeCRD *apiextensions.CustomResourceDefinitionVersion, basesCRD *apiextensions.CustomResourceDefinitionVersion) error {
+type patchContext struct {
+	// compositionValidationMode is the validation mode for the composition.
+	compositionValidationMode v1.CompositionValidationMode
+
+	// gvkValidationMap is a map of GVK to CRD validation.
+	gvkCRDValidation gvkValidationMap
+
+	// compositeGVK is the GVK of the composite resource.
+	compositeGVK schema.GroupVersionKind
+
+	// composedGVK is the GVK of the composed resource.
+	composedGVK schema.GroupVersionKind
+}
+
+func validatePatch(patch v1.Patch, patchContext *patchContext) (err error) {
 	switch patch.Type {
-	default:
-		return nil
+	case v1.PatchTypeFromCompositeFieldPath:
+		err = validateFromCompositeFieldPathPatch(patch, patchContext)
 	}
+	if err != nil {
+		return err
+	}
+	fmt.Println("HERE: valid patch: ", patch.Type)
+	return nil
+}
+
+func validateFromCompositeFieldPathPatch(patch v1.Patch, c *patchContext) error {
+	compositeValidation, ok := c.gvkCRDValidation[c.compositeGVK]
+	if !ok && c.compositionValidationMode == v1.CompositionValidationModeStrict {
+		return errors.Errorf("no validation found for composite resource: %v", c.compositeGVK)
+	}
+	composedValidation, ok := c.gvkCRDValidation[c.composedGVK]
+	if !ok && c.compositionValidationMode == v1.CompositionValidationModeStrict {
+		return errors.Errorf("no validation found for composed resource: %v", c.composedGVK)
+	}
+	compositeFieldpathType, err := validateFieldPath(patch.FromFieldPath, compositeValidation.OpenAPIV3Schema)
+	if err != nil {
+		return errors.Wrapf(err, "invalid fromFieldPath: %s", patch.FromFieldPath)
+	}
+	composedFieldpathType, err := validateFieldPath(patch.ToFieldPath, composedValidation.OpenAPIV3Schema)
+	if err != nil {
+		return errors.Wrapf(err, "invalid toFieldPath: %s", patch.ToFieldPath)
+	}
+	if compositeFieldpathType != "" && composedFieldpathType != "" && compositeFieldpathType != composedFieldpathType {
+		return errors.Errorf("field path types do not match: %s, %s", compositeFieldpathType, composedFieldpathType)
+	}
+	return nil
+}
+
+// validateFieldPath validates that the given field path is valid for the given schema.
+// It returns the type of the field path if it is valid, or an error otherwise.
+func validateFieldPath(path *string, s *apiextensions.JSONSchemaProps) (fieldType string, err error) {
+	if path == nil {
+		return "", nil
+	}
+	segments, err := fieldpath.Parse(*path)
+	if len(segments) > 0 && segments[0].Type == fieldpath.SegmentField && segments[0].Field == "metadata" {
+		segments = segments[1:]
+		s = &metadataSchema
+	}
+	if err != nil {
+		return "", nil
+	}
+	current := s
+	for _, segment := range segments {
+		var err error
+		current, err = validateFieldPathSegment(current, segment)
+		if err != nil {
+			return "", err
+		}
+		if current == nil {
+			return "", nil
+		}
+	}
+	return current.Type, nil
+}
+
+// validateFieldPathSegment validates that the given field path segment is valid for the given schema.
+// It returns the schema of the field path segment if it is valid, or an error otherwise.
+func validateFieldPathSegment(current *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (*apiextensions.JSONSchemaProps, error) {
+	switch segment.Type {
+	case fieldpath.SegmentField:
+		propType := current.Type
+		if propType == "" {
+			propType = "object"
+		}
+		if propType != "object" {
+			return nil, errors.Errorf("trying to access field of not an object: %v", propType)
+		}
+		if pointer.BoolDeref(current.XPreserveUnknownFields, false) {
+			return nil, nil
+		}
+		prop, exists := current.Properties[segment.Field]
+		if !exists {
+			if current.AdditionalProperties != nil && current.AdditionalProperties.Allows {
+				return current.AdditionalProperties.Schema, nil
+			}
+			return nil, errors.Errorf("unable to find field: %s", segment.Field)
+		}
+		return &prop, nil
+	case fieldpath.SegmentIndex:
+		if current.Type != "array" {
+			return nil, errors.Errorf("accessing by index a %s field", current.Type)
+		}
+		if current.Items == nil {
+			return nil, errors.New("no items found in array")
+		}
+		if s := current.Items.Schema; s != nil {
+			return s, nil
+		}
+		schemas := current.Items.JSONSchemas
+		if len(schemas) < int(segment.Index) {
+			return nil, errors.Errorf("")
+		}
+
+		return current.Items.Schema, nil
+	}
+	return nil, nil
 }
