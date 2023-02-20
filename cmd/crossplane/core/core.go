@@ -177,7 +177,7 @@ func (c *startCommand) Run(s *runtime.Scheme, log logging.Logger) error { //noli
 		if err := (&apiextensionsv1.CompositeResourceDefinition{}).SetupWebhookWithManager(mgr); err != nil {
 			return errors.Wrap(err, "cannot setup webhook for compositeresourcedefinitions")
 		}
-		validator := validation.ClientCompositionValidator{}
+		validator := validation.ClientValidator{}
 		if err := validator.SetupWithManager(mgr); err != nil {
 			return err
 		}
