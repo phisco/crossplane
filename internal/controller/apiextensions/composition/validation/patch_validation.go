@@ -91,7 +91,7 @@ func ValidateFromCompositeFieldPathPatch(patch v1.Patch, req *PatchValidationReq
 	}
 	compositeFieldpathType, err := validateFieldPath(patch.FromFieldPath, compositeValidation.OpenAPIV3Schema)
 	if err != nil {
-		return xprerrors.Wrapf(err, "invalid fromFieldPath: %s", patch.FromFieldPath)
+		return xprerrors.Wrapf(err, "invalid fromFieldPath: %s", *patch.FromFieldPath)
 	}
 	composedFieldpathType, err := validateFieldPath(patch.ToFieldPath, composedValidation.OpenAPIV3Schema)
 	if err != nil {
