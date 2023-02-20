@@ -58,6 +58,9 @@ var (
 
 	metadataSchema = apiextensions.JSONSchemaProps{
 		Type: "object",
+		AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
+			Allows: true,
+		},
 		Properties: map[string]apiextensions.JSONSchemaProps{
 			"name": {
 				Type: "string",
@@ -205,6 +208,7 @@ func RejectFunctionsWithoutRequiredConfig(comp *v1.Composition) error {
 type ClientCompositionValidator struct {
 	client         client.Client
 	validationMode v1.CompositionValidationMode
+	renderer       composite.Renderer
 }
 
 func (c *ClientCompositionValidator) SetupWithManager(mgr ctrl.Manager) error {
@@ -220,6 +224,7 @@ func (c *ClientCompositionValidator) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 	c.client = unstructured.NewClient(mgr.GetClient())
+	c.renderer = composite.NewPureRenderer()
 	return ctrl.NewWebhookManagedBy(mgr).
 		WithValidator(c).
 		For(&v1.Composition{}).
@@ -282,6 +287,11 @@ func (c *ClientCompositionValidator) ValidateCreate(ctx context.Context, obj run
 
 	composedResources := make([]runtime.Object, len(resources))
 
+	compositeRes := composite2.New(composite2.WithGroupVersionKind(compositeResGVK))
+	compositeRes.SetUID("validation-uid")
+	compositeRes.SetName("validation-name")
+	composite.NewPureAPINamingConfigurator().Configure(ctx, compositeRes, nil)
+
 	// Validate all patches given the schemas above
 	for i, resource := range resources {
 		fmt.Println("HERE: resource detected: ", resource)
@@ -303,20 +313,18 @@ func (c *ClientCompositionValidator) ValidateCreate(ctx context.Context, obj run
 				fmt.Println("HERE: validatePatch failed: ", err)
 				return err
 			}
-			compositeRes := composite2.New(composite2.WithGroupVersionKind(compositeResGVK))
+		}
 
-			err := composite.Apply(patch, compositeRes, cd, v1.PatchTypeFromCompositeFieldPath)
-			if err != nil {
-				fmt.Println("HERE: ApplyToObjects failed: ", err)
-				return nil
-			}
+		// TODO: handle env too
+		if err := c.renderer.Render(ctx, compositeRes, cd, resource, nil); err != nil {
+			fmt.Println("HERE: c.renderer.Render failed: ", err)
+			return err
 		}
 		composedResources[i] = cd
 	}
 	fmt.Println("HERE: composedResources detected: ", composedResources)
 
 	// Validate Rendered Composed Resources from Composition
-
 	for _, renderedComposed := range composedResources {
 		fmt.Println("HERE: renderedComposed detected: ", renderedComposed)
 		crdV, ok := managedResourcesCRDs[renderedComposed.GetObjectKind().GroupVersionKind()]
@@ -510,9 +518,14 @@ func validateFieldPath(path *string, s *apiextensions.JSONSchemaProps) (fieldTyp
 // validateFieldPathSegment validates that the given field path segment is valid for the given schema.
 // It returns the schema of the field path segment if it is valid, or an error otherwise.
 func validateFieldPathSegment(current *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (*apiextensions.JSONSchemaProps, error) {
+	if current == nil {
+		fmt.Println("HERE: current is nil")
+		return nil, nil
+	}
 	switch segment.Type {
 	case fieldpath.SegmentField:
 		propType := current.Type
+		fmt.Println("HERE: propType: ", propType)
 		if propType == "" {
 			propType = "object"
 		}
