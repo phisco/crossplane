@@ -232,7 +232,6 @@ func (c *ClientCompositionValidator) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (c *ClientCompositionValidator) ValidateCreate(ctx context.Context, obj runtime.Object) error {
-	fmt.Println("HERE: GOT A CREATE")
 
 	comp, ok := obj.(*v1.Composition)
 	if !ok {
@@ -245,14 +244,11 @@ func (c *ClientCompositionValidator) ValidateCreate(ctx context.Context, obj run
 		return err
 	}
 
-	fmt.Println("HERE: validationMode detected: ", validationMode)
-
 	// Validate general assertions
 	if err := defaultCompositionValidationChain.Validate(comp); err != nil {
 		fmt.Errorf("HERE: defaultCompositionValidationChain failed: %v", err)
 		return err
 	}
-	fmt.Println("HERE: defaultCompositionValidationChain validated")
 
 	c.validationMode = validationMode
 
@@ -261,19 +257,15 @@ func (c *ClientCompositionValidator) ValidateCreate(ctx context.Context, obj run
 	compositeResGVK := schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
 		comp.Spec.CompositeTypeRef.Kind)
 
-	fmt.Println("HERE: compositeResGVK detected: ", compositeResGVK)
 	compositeCrdValidation, err := c.getCRDValidationForGVK(ctx, &compositeResGVK)
 	if err != nil {
-		fmt.Println("HERE: getCRDValidationForGVK failed: ", err)
 		return err
 	}
-	fmt.Println("HERE: compositeCrdValidation detected: ", compositeCrdValidation)
 	// Get schema for all Managed Resources in comp.Spec.Resources[*].Base
 	managedResourcesCRDs, err := c.getBasesCRDs(ctx, comp.Spec.Resources)
 	if err != nil {
 		return err
 	}
-	fmt.Println("HERE: managedResourcesCRDs detected: ", managedResourcesCRDs)
 	if compositeCrdValidation != nil {
 		managedResourcesCRDs[compositeResGVK] = *compositeCrdValidation
 	}
@@ -283,7 +275,6 @@ func (c *ClientCompositionValidator) ValidateCreate(ctx context.Context, obj run
 	if err != nil {
 		return err
 	}
-	fmt.Println("HERE: resources detected: ", resources)
 
 	composedResources := make([]runtime.Object, len(resources))
 
@@ -294,7 +285,6 @@ func (c *ClientCompositionValidator) ValidateCreate(ctx context.Context, obj run
 
 	// Validate all patches given the schemas above
 	for i, resource := range resources {
-		fmt.Println("HERE: resource detected: ", resource)
 		// validate patches using it and the compositeCrd resource
 		cd := composed.New()
 		if err := json.Unmarshal(resource.Base.Raw, cd); err != nil {
@@ -308,51 +298,40 @@ func (c *ClientCompositionValidator) ValidateCreate(ctx context.Context, obj run
 			compositeGVK:              compositeResGVK,
 		}
 		for _, patch := range resource.Patches {
-			fmt.Println("HERE: patch detected: ", patch)
 			if err := validatePatch(patch, &patchCtx); err != nil {
-				fmt.Println("HERE: validatePatch failed: ", err)
 				return err
 			}
 		}
 
 		// TODO: handle env too
 		if err := c.renderer.Render(ctx, compositeRes, cd, resource, nil); err != nil {
-			fmt.Println("HERE: c.renderer.Render failed: ", err)
 			return err
 		}
 		composedResources[i] = cd
 	}
-	fmt.Println("HERE: composedResources detected: ", composedResources)
 
 	// Validate Rendered Composed Resources from Composition
 	for _, renderedComposed := range composedResources {
-		fmt.Println("HERE: renderedComposed detected: ", renderedComposed)
 		crdV, ok := managedResourcesCRDs[renderedComposed.GetObjectKind().GroupVersionKind()]
 		if !ok {
 			if c.validationMode == v1.CompositionValidationModeStrict {
 				return errors.Errorf("No CRD validation found for rendered resource: %v", renderedComposed.GetObjectKind().GroupVersionKind())
 			}
-			fmt.Println("HERE: No CRD validation found for rendered resource: ", renderedComposed.GetObjectKind().GroupVersionKind())
 			continue
 		}
 		vs, _, err := validation.NewSchemaValidator(&crdV)
 		if err != nil {
-			fmt.Println("HERE: NewSchemaValidator failed: ", err)
 			return err
 		}
 		r := vs.Validate(renderedComposed)
 		if r.HasErrors() {
-			fmt.Println("HERE: renderedComposed validation failed: ", r.AsError())
 			return r.AsError()
 		}
 		if r.HasWarnings() {
-			fmt.Println("HERE: renderedComposed validation failed: ", errors.Errorf("warnings: %v", r.Warnings))
 			return errors.Errorf("warnings: %v", r.Warnings)
 		}
-		fmt.Println("HERE: renderedComposed validated: ", renderedComposed)
 	}
 
-	fmt.Println("HERE: ALL VALIDATED")
 	return nil
 }
 
@@ -374,12 +353,10 @@ func getCompositionValidationMode(comp *v1.Composition) (v1.CompositionValidatio
 }
 
 func (c *ClientCompositionValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) error {
-	fmt.Println("HERE: GOT AN UPDATE")
 	return c.ValidateCreate(ctx, newObj)
 }
 
 func (c *ClientCompositionValidator) ValidateDelete(ctx context.Context, obj runtime.Object) error {
-	fmt.Println("HERE: GOT A DELETE")
 	return nil
 }
 
@@ -393,10 +370,8 @@ func (c *ClientCompositionValidator) getCRDValidationForGVK(ctx context.Context,
 		if c.validationMode == v1.CompositionValidationModeStrict {
 			return nil, fmt.Errorf("no CRDs found: %v", gvk)
 		}
-		fmt.Println("HERE: no CRDs found, but ok: ", gvk)
 		return nil, nil
 	case 1:
-		fmt.Println("HERE: one CRD found: ", gvk)
 		crd := crds.Items[0]
 		internal := &apiextensions.CustomResourceDefinition{}
 		if err := extv1.Convert_v1_CustomResourceDefinition_To_apiextensions_CustomResourceDefinition(&crd, internal, nil); err != nil {
@@ -460,7 +435,6 @@ func validatePatch(patch v1.Patch, patchContext *patchContext) (err error) {
 	if err != nil {
 		return err
 	}
-	fmt.Println("HERE: valid patch: ", patch.Type)
 	return nil
 }
 
@@ -519,13 +493,11 @@ func validateFieldPath(path *string, s *apiextensions.JSONSchemaProps) (fieldTyp
 // It returns the schema of the field path segment if it is valid, or an error otherwise.
 func validateFieldPathSegment(current *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (*apiextensions.JSONSchemaProps, error) {
 	if current == nil {
-		fmt.Println("HERE: current is nil")
 		return nil, nil
 	}
 	switch segment.Type {
 	case fieldpath.SegmentField:
 		propType := current.Type
-		fmt.Println("HERE: propType: ", propType)
 		if propType == "" {
 			propType = "object"
 		}
