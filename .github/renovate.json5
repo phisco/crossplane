@@ -41,7 +41,8 @@
   ],
 // PackageRules disabled below should be enabled in case of vulnerabilities
   "vulnerabilityAlerts": {
-    "enabled": true
+    "enabled": true,
+    "schedule": ["at any time"],
   },
   "packageRules": [
 // We don't want dependency updates which are not security related for
