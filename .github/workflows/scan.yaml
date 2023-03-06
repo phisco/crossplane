@@ -6,7 +6,6 @@ on:
     - cron: '7 3 * * *'
 
 env:
-  GOMPLATE_VERSION: v3.11.4
   DOCKER_USR: ${{ secrets.DOCKER_USR }}
 
 jobs:
@@ -21,7 +20,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get last 3 supported releases and their latest tags
+      - name: Get Last 3 Releases
         id: get-releases
         shell: bash
         ## find the 3 latest supported releases and their latest patch releases, storing them in the steps' outputs
@@ -70,7 +69,7 @@ jobs:
     needs:
       - generate-matrix
     steps:
-      - name: Check matrix definition
+      - name: Check Matrix Definition
         shell: bash
         run: |
           supported_releases='${{ needs.generate-matrix.outputs.supported_releases }}'
@@ -97,7 +96,7 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-      - name: Get tag
+      - name: Get Release Tag
         run: |
           echo "${{ matrix.release }}"
           tag="$(echo '${{ needs.generate-matrix.outputs.versions }}' | jq --raw-output ".[\"${{ matrix.release }}\"]")"
@@ -105,7 +104,7 @@ jobs:
           echo "escaped_filename=$(echo ${{ matrix.image }}/$tag | sed 's/[\/.:]/_/g')" >> $GITHUB_ENV
 
       # we log to DockerHub to avoid rate limiting
-      - name: Login to DockerHub
+      - name: Login To DockerHub
         uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a # v2
         if: env.DOCKER_USR != ''
         with:
@@ -113,10 +112,10 @@ jobs:
           password: ${{ secrets.DOCKER_PSW }}
 
       # we pull the image to be sure we're scanning the latest sha available
-      - name: Pull image
+      - name: Pull Latest Image
         run: docker pull ${{ matrix.image }}:${{ env.tag }}
 
-      - name: Run Trivy vulnerability scanner
+      - name: Run Trivy Vulnerability Scanner
         uses: aquasecurity/trivy-action@8bd2f9fbda2109502356ff8a6a89da55b1ead252 # 0.9.1
         with:
           image-ref: ${{ matrix.image }}:${{ env.tag }}
@@ -125,19 +124,16 @@ jobs:
           severity: HIGH,CRITICAL
           output: 'trivy-results.sarif'
           limit-severities-for-sarif: true
-          exit-code: "1"
 
-      - name: 'Upload Artifact'
+      - name: Upload Artifact
         uses: actions/upload-artifact@v3
-        if: failure()
         with:
           name: trivy-${{ env.escaped_filename }}.sarif
           path: trivy-results.sarif
           retention-days: 3
 
-      - name: Upload Trivy scan results to GitHub Security tab
+      - name: Upload Trivy Scan Results To GitHub Security Tab
         uses: github/codeql-action/upload-sarif@v2
-        if: failure()
         with:
           sarif_file: 'trivy-results.sarif'
           category: ${{ matrix.image }}:${{ env.tag }}
