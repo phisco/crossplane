@@ -120,10 +120,7 @@ jobs:
         with:
           image-ref: ${{ matrix.image }}:${{ env.tag }}
           format: 'sarif'
-          ignore-unfixed: true
-          severity: HIGH,CRITICAL
           output: 'trivy-results.sarif'
-          limit-severities-for-sarif: true
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
