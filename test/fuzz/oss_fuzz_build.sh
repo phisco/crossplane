@@ -17,6 +17,8 @@ set -o pipefail
 set -o errexit
 set -x
 
+project=${1-crossplane/crossplane}
+
 printf "package main\nimport ( \n _ \"github.com/AdamKorcz/go-118-fuzz-build/testing\"\n )\n" > register.go
 
 # Moving all the fuzz_test.go to fuzz_test_fuzz.go, as oss-fuzz uses go build to build fuzzers
@@ -38,5 +40,5 @@ grep --line-buffered --include '*_test_fuzz.go' -Pr 'func Fuzz.*\(.* \*testing\.
   file="$(echo "{}" | cut -d: -f1)"
   folder="$(dirname $file)"
   func="Fuzz$(echo "{}" | cut -d: -f2)"
-  compile_native_go_fuzzer github.com/crossplane/crossplane/$folder $func $func
+  compile_native_go_fuzzer github.com/'"$project"'/$folder $func $func
 '
