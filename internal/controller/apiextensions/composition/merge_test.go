@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package composite
+package composition
 
 import (
 	"testing"
@@ -417,8 +417,8 @@ func TestMergeOptions(t *testing.T) {
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			if got := mergeOptions(tc.args.patches); len(got) != tc.wantLength {
-				t.Errorf("mergeOptions(...): want length %v, got length %v", tc.wantLength, len(got))
+			if got := MergeOptions(tc.args.patches); len(got) != tc.wantLength {
+				t.Errorf("MergeOptions(...): want length %v, got length %v", tc.wantLength, len(got))
 			}
 		})
 	}

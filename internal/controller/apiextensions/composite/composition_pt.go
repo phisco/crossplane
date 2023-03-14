@@ -20,6 +20,8 @@ import (
 	"context"
 	"strconv"
 
+	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
+
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -171,7 +173,7 @@ func NewPTComposer(kube client.Client, o ...PTComposerOption) *PTComposer {
 // supplied Composition.
 func (c *PTComposer) Compose(ctx context.Context, xr resource.Composite, req CompositionRequest) (CompositionResult, error) { //nolint:gocyclo // Breaking this up doesn't seem worth yet more layers of abstraction.
 	// Inline PatchSets from Composition Spec before composing resources.
-	ct, err := ComposedTemplates(req.Composition.Spec)
+	ct, err := xpcomposition.ComposedTemplates(req.Composition.Spec)
 	if err != nil {
 		return CompositionResult{}, errors.Wrap(err, errInline)
 	}
@@ -185,7 +187,7 @@ func (c *PTComposer) Compose(ctx context.Context, xr resource.Composite, req Com
 	// resources.
 	if req.Environment != nil && req.Composition.Spec.Environment != nil {
 		for i, p := range req.Composition.Spec.Environment.Patches {
-			if err := ApplyEnvironmentPatch(p, xr, req.Environment); err != nil {
+			if err := xpcomposition.ApplyEnvironmentPatch(p, xr, req.Environment); err != nil {
 				return CompositionResult{}, errors.Wrapf(err, errFmtPatchEnvironment, i)
 			}
 		}
@@ -240,7 +242,7 @@ func (c *PTComposer) Compose(ctx context.Context, xr resource.Composite, req Com
 			continue
 		}
 		o := []resource.ApplyOption{resource.MustBeControllableBy(xr.GetUID())}
-		o = append(o, mergeOptions(filterPatches(cd.Template.Patches, patchTypesFromXR()...))...)
+		o = append(o, xpcomposition.MergeOptions(filterPatches(cd.Template.Patches, patchTypesFromXR()...))...)
 		if err := c.client.Apply(ctx, cd.Resource, o...); err != nil {
 			return CompositionResult{}, errors.Wrap(err, errApply)
 		}
@@ -292,7 +294,7 @@ func (c *PTComposer) Compose(ctx context.Context, xr resource.Composite, req Com
 	// and we'll proceed to update the status as soon as there are no changes to
 	// be made to the spec.
 	objCopy := xr.DeepCopyObject().(client.Object)
-	if err := c.client.Apply(ctx, objCopy, mergeOptions(toXRPatchesFromTAs(tas))...); err != nil {
+	if err := c.client.Apply(ctx, objCopy, xpcomposition.mergeOptions(toXRPatchesFromTAs(tas))...); err != nil {
 		return CompositionResult{}, errors.Wrap(err, errUpdate)
 	}
 
@@ -525,11 +527,11 @@ func (r *APIDryRunRenderer) Render(ctx context.Context, cp resource.Composite, c
 	cd.SetNamespace(namespace)
 
 	for i := range t.Patches {
-		if err := Apply(t.Patches[i], cp, cd, patchTypesFromXR()...); err != nil {
+		if err := xpcomposition.Apply(t.Patches[i], cp, cd, patchTypesFromXR()...); err != nil {
 			return errors.Wrapf(err, errFmtPatch, i)
 		}
 		if env != nil {
-			if err := ApplyToObjects(t.Patches[i], env, cd, patchTypesFromToEnvironment()...); err != nil {
+			if err := xpcomposition.ApplyToObjects(t.Patches[i], env, cd, patchTypesFromToEnvironment()...); err != nil {
 				return errors.Wrapf(err, errFmtPatch, i)
 			}
 		}
@@ -574,7 +576,7 @@ func (r *APIDryRunRenderer) Render(ctx context.Context, cp resource.Composite, c
 // resource and template.
 func RenderComposite(_ context.Context, cp resource.Composite, cd resource.Composed, t v1.ComposedTemplate, _ *env.Environment) error {
 	for i, p := range t.Patches {
-		if err := Apply(p, cp, cd, patchTypesToXR()...); err != nil {
+		if err := xpcomposition.Apply(p, cp, cd, patchTypesToXR()...); err != nil {
 			return errors.Wrapf(err, errFmtPatch, i)
 		}
 	}

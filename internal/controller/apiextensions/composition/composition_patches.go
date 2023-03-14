@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package composite
+package composition
 
 import (
 	"fmt"
@@ -34,7 +34,7 @@ const (
 	errPatchSetType             = "a patch in a PatchSet cannot be of type PatchSet"
 	errCombineRequiresVariables = "combine patch types require at least one variable"
 
-	errFmtUndefinedPatchSet           = "cannot find PatchSet by name %s"
+	ErrFmtUndefinedPatchSet           = "cannot find PatchSet by name %s"
 	errFmtInvalidPatchType            = "patch type %s is unsupported"
 	errFmtCombineStrategyNotSupported = "combine strategy %s is not supported"
 	errFmtCombineConfigMissing        = "given combine strategy %s requires configuration"
@@ -311,28 +311,23 @@ func CombineString(format string, vars []any) (any, error) {
 func ComposedTemplates(cs v1.CompositionSpec) ([]v1.ComposedTemplate, error) {
 	pn := make(map[string][]v1.Patch)
 	for _, s := range cs.PatchSets {
-		for _, p := range s.Patches {
-			if p.Type == v1.PatchTypePatchSet {
-				return nil, errors.New(errPatchSetType)
-			}
-		}
 		pn[s.Name] = s.Patches
 	}
 
 	ct := make([]v1.ComposedTemplate, len(cs.Resources))
 	for i, r := range cs.Resources {
-		po := []v1.Patch{}
+		var po []v1.Patch
 		for _, p := range r.Patches {
 			if p.Type != v1.PatchTypePatchSet {
 				po = append(po, p)
 				continue
 			}
 			if p.PatchSetName == nil {
-				return nil, errors.Errorf(errFmtRequiredField, "PatchSetName", p.Type)
+				return nil, errors.Errorf("%s is required by type %s", "PatchSetName", p.Type)
 			}
 			ps, ok := pn[*p.PatchSetName]
 			if !ok {
-				return nil, errors.Errorf(errFmtUndefinedPatchSet, *p.PatchSetName)
+				return nil, errors.Errorf("cannot find PatchSet by name %s", *p.PatchSetName)
 			}
 			po = append(po, ps...)
 		}

@@ -22,8 +22,8 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
-	composite2 "github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composite"
-	validation3 "github.com/crossplane/crossplane-runtime/pkg/validation"
+	xprcomposite "github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composite"
+	xprvalidation "github.com/crossplane/crossplane-runtime/pkg/validation"
 	"github.com/crossplane/crossplane/apis/apiextensions/v1"
 	"github.com/crossplane/crossplane/internal/controller/apiextensions/composite"
 	"github.com/crossplane/crossplane/internal/controller/apiextensions/composition/validation"
@@ -161,11 +161,11 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 	// Mock any required input given their CRDs => crossplane-runtime
 	compositeResGVK := schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
 		comp.Spec.CompositeTypeRef.Kind)
-	compositeRes := composite2.New(composite2.WithGroupVersionKind(compositeResGVK))
+	compositeRes := xprcomposite.New(xprcomposite.WithGroupVersionKind(compositeResGVK))
 	compositeRes.SetName("fake")
 	compositeRes.SetNamespace("test")
 	compositeRes.SetCompositionReference(&corev1.ObjectReference{Name: comp.GetName()})
-	if err := validation3.MockRequiredFields(compositeRes, gvkToCRDs[compositeResGVK].Spec.Validation.OpenAPIV3Schema); err != nil {
+	if err := xprvalidation.MockRequiredFields(compositeRes, gvkToCRDs[compositeResGVK].Spec.Validation.OpenAPIV3Schema); err != nil {
 		return errors.Wrap(err, "cannot mock required fields")
 	}
 
@@ -181,6 +181,8 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 		return errors.Wrap(err, "cannot render resources")
 	}
 
+	fakeClient := mockClient.GetClient()
+
 	// Validate resources given their CRDs => crossplane-runtime
 	var validationErrs []error
 	var validationWarns []error
@@ -190,7 +192,7 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 		}
 		composedRes := &unstructured2.UnstructuredList{}
 		composedRes.SetGroupVersionKind(gvk)
-		err = mockClient.List(ctx, composedRes, client.MatchingLabels{xcrd.LabelKeyNamePrefixForComposed: "fake"})
+		err = fakeClient.List(ctx, composedRes, client.MatchingLabels{xcrd.LabelKeyNamePrefixForComposed: "fake"})
 		if err != nil {
 			return errors.Wrap(err, "cannot list composed resources")
 		}
@@ -204,7 +206,7 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 				validationErrs = append(validationErrs, r.Errors...)
 			}
 			if r.HasWarnings() {
-				validationErrs = append(validationWarns, r.Warnings...)
+				validationWarns = append(validationWarns, r.Warnings...)
 			}
 		}
 	}
