@@ -163,6 +163,23 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 					ToFieldPath:   toPointer("spec.someOtherWrongField"),
 				}),
 			},
+		}, {
+			name:    "Should reject a Composition with a transformation resulting in the wrong final type, if validation mode is strict and all CRDs are found",
+			wantErr: true,
+			args: args{
+				existingObjs: defaultCRDs(),
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
+					Type:          v1.PatchTypeFromCompositeFieldPath,
+					FromFieldPath: toPointer("spec.someField"),
+					ToFieldPath:   toPointer("spec.someOtherField"),
+					Transforms: []v1.Transform{{
+						Type: v1.TransformTypeMath,
+						Math: &v1.MathTransform{
+							Multiply: toPointer(int64(2)),
+						},
+					}},
+				}),
+			},
 		},
 	}
 	for _, tt := range tests {

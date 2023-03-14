@@ -102,7 +102,7 @@ func ValidatePatch(
 
 // ValidateFromCompositeFieldPathPatch validates a patch of type FromCompositeFieldPath.
 //
-//nolint:gocyclo // TODO(phisco): refactor this function
+
 func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions.JSONSchemaProps) error {
 	fromFieldPath := safeDeref(patch.FromFieldPath)
 	toFieldPath := safeDeref(patch.ToFieldPath)
@@ -124,47 +124,30 @@ func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions
 		return nil
 	}
 
-	transformedToType, err := resolveTransformsType(patch.Transforms, fromType)
-	if err != nil {
-		return err
-	}
-	// TODO(phisco): handle "" types
-	if transformedToType == "*" || transformedToType == "" {
-		return nil
-	}
-	if transformedToType != toType {
-		return errors.Errorf("from field path (%s) and to field path (%s) have different types (%s != %s) and transforms do not resolve to the same type", fromFieldPath, toFieldPath, fromType, toType)
+	if err := validateTransforms(patch.Transforms, fromType, toType); err != nil {
+		return errors.Wrapf(err, "cannot validate transforms for patch from field path (%s) to field path (%s)", fromFieldPath, toFieldPath)
 	}
 
 	return nil
 }
 
-func resolveTransformsType(transforms []v1.Transform, fromType string) (transformedToType string, err error) {
-	transformedToType = fromType
+func validateTransforms(transforms []v1.Transform, fromType, toType string) (err error) {
+	transformedToType := fromType
 	for _, transform := range transforms {
-		transformedToType, err = resolveTransformType(transform)
+		err = composition.ValidateTransform(transform, transformedToType)
 		if err != nil {
-			return "", err
+			return err
 		}
+		transformedToType = composition.TransformOutputType(transform)
 	}
-	return transformedToType, nil
-}
-
-func resolveTransformType(transform v1.Transform) (string, error) {
-	switch transform.Type {
-	case v1.TransformTypeString:
-		return "string", nil
-	case v1.TransformTypeMath:
-		return "number", nil
-	case v1.TransformTypeConvert:
-		if transform.Convert == nil {
-			return "", errors.New("missing convert transform")
-		}
-		return transform.Convert.ToType, nil
-	case v1.TransformTypeMap, v1.TransformTypeMatch:
-		return "*", nil
+	// TODO(phisco): handle "" types
+	if transformedToType == "any" || transformedToType == "" {
+		return nil
 	}
-	return "", nil
+	if transformedToType != toType {
+		return errors.Errorf("from field path and to field path have different types (%s != %s) and transforms do not resolve to the same type", fromType, toType)
+	}
+	return nil
 }
 
 func safeDeref[T any](ptr *T) T {

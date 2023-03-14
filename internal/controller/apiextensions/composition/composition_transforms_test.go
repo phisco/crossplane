@@ -483,7 +483,7 @@ func TestStringResolve(t *testing.T) {
 		i       any
 	}
 	type want struct {
-		o   any
+		o   string
 		err error
 	}
 	sFmt := "verycool%s"

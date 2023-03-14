@@ -75,6 +75,9 @@ const (
 	errDecodeString = "string is not valid base64"
 	errMarshalJSON  = "cannot marshal to JSON"
 	errHash         = "cannot generate hash"
+
+	// TransformOutputTypeAny is the output type of a transform that can return any type.
+	TransformOutputTypeAny = "any"
 )
 
 // Resolve the supplied Transform.
@@ -114,6 +117,62 @@ func Resolve(t v1.Transform, input any) (any, error) { //nolint:gocyclo // This 
 	}
 
 	return out, errors.Wrapf(err, errFmtTransformTypeFailed, string(t.Type))
+}
+
+// TransformOutputType returns the output type of the supplied Transform.
+func TransformOutputType(t v1.Transform) string {
+	switch t.Type {
+	case v1.TransformTypeMath:
+		return "number"
+	case v1.TransformTypeMap:
+		return TransformOutputTypeAny
+	case v1.TransformTypeMatch:
+		return TransformOutputTypeAny
+	case v1.TransformTypeString:
+		return "string"
+	case v1.TransformTypeConvert:
+		return t.Convert.ToType
+	}
+	return ""
+}
+
+// ValidateTransform validates the supplied Transform, taking into consideration also the input type.
+//
+//nolint:gocyclo // This is a long but simple/same-y switch.
+func ValidateTransform(t v1.Transform, fromType string) error {
+	switch t.Type {
+	case v1.TransformTypeMath:
+		if t.Math == nil {
+			return errors.Errorf(errFmtTransformConfigMissing, t.Type)
+		}
+		if fromType != TransformOutputTypeAny && fromType != "number" && fromType != "integer" {
+			return errors.New(errMathInputNonNumber)
+		}
+	case v1.TransformTypeMap:
+		if t.Map == nil {
+			return errors.Errorf(errFmtTransformConfigMissing, t.Type)
+		}
+		if fromType != TransformOutputTypeAny && fromType != "string" {
+			return errors.Errorf(errFmtMapTypeNotSupported, fromType)
+		}
+	case v1.TransformTypeMatch:
+		if t.Match == nil {
+			return errors.Errorf(errFmtTransformConfigMissing, t.Type)
+		}
+		if fromType != TransformOutputTypeAny && fromType != "string" {
+			return errors.Errorf(errFmtMatchInputTypeInvalid, fromType)
+		}
+	case v1.TransformTypeString:
+		if t.String == nil {
+			return errors.Errorf(errFmtTransformConfigMissing, t.Type)
+		}
+		if fromType != TransformOutputTypeAny && fromType != "string" {
+			return errors.Errorf(errFmtMatchInputTypeInvalid, fromType)
+		}
+	case v1.TransformTypeConvert:
+		// TODO(phisco): validate convert using converts map above
+	}
+	return nil
 }
 
 // ResolveMath resolves a Math transform.
@@ -222,37 +281,36 @@ func unmarshalJSON(j extv1.JSON, output *any) error {
 }
 
 // ResolveString resolves a String transform.
-func ResolveString(t v1.StringTransform, input any) (any, error) {
+func ResolveString(t v1.StringTransform, input any) (string, error) {
 	switch t.Type {
 	case v1.StringTransformTypeFormat:
 		if t.Format == nil {
-			return nil, errors.Errorf(errStringTransformTypeFormat, string(t.Type))
+			return "", errors.Errorf(errStringTransformTypeFormat, string(t.Type))
 		}
 		return fmt.Sprintf(*t.Format, input), nil
 	case v1.StringTransformTypeConvert:
 		if t.Convert == nil {
-			return nil, errors.Errorf(errStringTransformTypeConvert, string(t.Type))
+			return "", errors.Errorf(errStringTransformTypeConvert, string(t.Type))
 		}
 		return stringConvertTransform(input, t.Convert)
-
 	case v1.StringTransformTypeTrimPrefix, v1.StringTransformTypeTrimSuffix:
 		if t.Trim == nil {
-			return nil, errors.Errorf(errStringTransformTypeTrim, string(t.Type))
+			return "", errors.Errorf(errStringTransformTypeTrim, string(t.Type))
 		}
 		return stringTrimTransform(input, t.Type, *t.Trim), nil
 	case v1.StringTransformTypeRegexp:
 		if t.Regexp == nil {
-			return nil, errors.Errorf(errStringTransformTypeRegexp, string(t.Type))
+			return "", errors.Errorf(errStringTransformTypeRegexp, string(t.Type))
 		}
 		return stringRegexpTransform(input, *t.Regexp)
 	default:
-		return nil, errors.Errorf(errStringTransformTypeFailed, string(t.Type))
+		return "", errors.Errorf(errStringTransformTypeFailed, string(t.Type))
 	}
 }
 
 // TODO(negz): Flip args.
 
-func stringConvertTransform(input any, t *v1.StringConversionType) (any, error) {
+func stringConvertTransform(input any, t *v1.StringConversionType) (string, error) {
 	str := fmt.Sprintf("%v", input)
 	switch *t {
 	case v1.StringConversionTypeToUpper:
@@ -277,7 +335,7 @@ func stringConvertTransform(input any, t *v1.StringConversionType) (any, error) 
 		hash, err := stringGenerateHash(input, sha512.Sum512)
 		return hex.EncodeToString(hash[:]), errors.Wrap(err, errHash)
 	default:
-		return nil, errors.Errorf(errStringConvertTypeFailed, *t)
+		return "", errors.Errorf(errStringConvertTypeFailed, *t)
 	}
 }
 
@@ -301,10 +359,10 @@ func stringTrimTransform(input any, t v1.StringTransformType, trim string) strin
 	return str
 }
 
-func stringRegexpTransform(input any, r v1.StringTransformRegexp) (any, error) {
+func stringRegexpTransform(input any, r v1.StringTransformRegexp) (string, error) {
 	re, err := regexp.Compile(r.Match)
 	if err != nil {
-		return nil, errors.Wrap(err, errStringTransformTypeRegexpFailed)
+		return "", errors.Wrap(err, errStringTransformTypeRegexpFailed)
 	}
 
 	groups := re.FindStringSubmatch(fmt.Sprintf("%v", input))
@@ -312,7 +370,7 @@ func stringRegexpTransform(input any, r v1.StringTransformRegexp) (any, error) {
 	// Return the entire match (group zero) by default.
 	g := pointer.IntDeref(r.Group, 0)
 	if len(groups) == 0 || g >= len(groups) {
-		return nil, errors.Errorf(errStringTransformTypeRegexpNoMatch, r.Match, g)
+		return "", errors.Errorf(errStringTransformTypeRegexpNoMatch, r.Match, g)
 	}
 
 	return groups[g], nil
