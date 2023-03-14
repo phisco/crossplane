@@ -245,7 +245,7 @@ func TestMergePath(t *testing.T) {
 			},
 			want: want{
 				err: errors.Wrap(errors.New(
-					"ToUnstructured requires a non-nil pointer to an object, got composite.strObject"),
+					"ToUnstructured requires a non-nil pointer to an object, got composition.strObject"),
 					"cannot convert object to unstructured data"),
 			},
 		},
@@ -258,7 +258,7 @@ func TestMergePath(t *testing.T) {
 			},
 			want: want{
 				err: errors.Wrap(errors.New(
-					"ToUnstructured requires a non-nil pointer to an object, got composite.strObject"),
+					"ToUnstructured requires a non-nil pointer to an object, got composition.strObject"),
 					"cannot convert object to unstructured data"),
 			},
 		},
@@ -336,7 +336,7 @@ func TestMergeReplace(t *testing.T) {
 			},
 			want: want{
 				err: errors.Wrap(errors.New(
-					"ToUnstructured requires a non-nil pointer to an object, got composite.strObject"),
+					"ToUnstructured requires a non-nil pointer to an object, got composition.strObject"),
 					"cannot convert object to unstructured data"),
 			},
 		},
