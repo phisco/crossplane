@@ -18,6 +18,7 @@ package v1
 
 import (
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
+	"github.com/crossplane/crossplane-runtime/pkg/errors"
 )
 
 // A PatchType is a type of patch.
@@ -98,6 +99,30 @@ type Patch struct {
 	// Policy configures the specifics of patching behaviour.
 	// +optional
 	Policy *PatchPolicy `json:"policy,omitempty"`
+}
+
+// Validate the Patch object.
+func (p *Patch) Validate() error {
+	t := p.Type
+	if t == "" {
+		t = PatchTypeFromCompositeFieldPath
+	}
+
+	switch p.Type {
+	case PatchTypeFromCompositeFieldPath, PatchTypeFromEnvironmentFieldPath, PatchTypeToCompositeFieldPath, PatchTypeToEnvironmentFieldPath:
+		if p.FromFieldPath == nil {
+			return errors.New("fromFieldPath must be set for patch type " + string(p.Type))
+		}
+	case PatchTypePatchSet:
+		if p.PatchSetName == nil {
+			return errors.New("patchSetName must be set for patch type " + string(p.Type))
+		}
+	case PatchTypeCombineFromEnvironment, PatchTypeCombineFromComposite, PatchTypeCombineToComposite, PatchTypeCombineToEnvironment:
+		if p.Combine == nil {
+			return errors.New("combine must be set for patch type " + string(p.Type))
+		}
+	}
+	return nil
 }
 
 // A CombineVariable defines the source of a value that is combined with

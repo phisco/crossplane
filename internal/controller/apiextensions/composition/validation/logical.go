@@ -14,10 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package composite
+package validation
 
 import (
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
+	"github.com/crossplane/crossplane-runtime/pkg/validation"
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 )
 
@@ -31,30 +32,18 @@ const (
 	errFmtUnknownFnType = "unknown function type %q"
 )
 
-// A CompositionValidator validates the supplied Composition.
-type CompositionValidator interface {
-	Validate(comp *v1.Composition) error
-}
-
-// A CompositionValidatorFn validates the supplied Composition.
-type CompositionValidatorFn func(comp *v1.Composition) error
-
-// Validate the supplied Composition.
-func (fn CompositionValidatorFn) Validate(comp *v1.Composition) error {
-	return fn(comp)
-}
-
-// A ValidationChain runs multiple validations.
-type ValidationChain []CompositionValidator
-
-// Validate the supplied Composition.
-func (vs ValidationChain) Validate(comp *v1.Composition) error {
-	for _, v := range vs {
-		if err := v.Validate(comp); err != nil {
-			return err
-		}
+var (
+	defaultValidationChain = validation.Chain[v1.Composition]{
+		validation.ValidatorFn[v1.Composition](RejectMixedTemplates),
+		validation.ValidatorFn[v1.Composition](RejectDuplicateNames),
+		validation.ValidatorFn[v1.Composition](RejectAnonymousTemplatesWithFunctions),
+		validation.ValidatorFn[v1.Composition](RejectFunctionsWithoutRequiredConfig),
 	}
-	return nil
+)
+
+// GetLogicalChecks returns the default validation chain for Compositions.
+func GetLogicalChecks() validation.Chain[v1.Composition] {
+	return defaultValidationChain[:]
 }
 
 // RejectMixedTemplates validates that the supplied Composition does not attempt

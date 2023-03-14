@@ -20,6 +20,8 @@ package composite
 import (
 	"context"
 	"fmt"
+	"github.com/crossplane/crossplane-runtime/pkg/validation"
+	compositionValidation "github.com/crossplane/crossplane/internal/controller/apiextensions/composition/validation"
 	"strconv"
 	"time"
 
@@ -249,9 +251,9 @@ func WithCompositionFetcher(f CompositionFetcher) ReconcilerOption {
 
 // WithCompositionValidator specifies how the Reconciler should validate
 // Compositions.
-func WithCompositionValidator(v CompositionValidator) ReconcilerOption {
+func WithCompositionValidator(v validation.Validator[v1.Composition]) ReconcilerOption {
 	return func(r *Reconciler) {
-		r.composition.CompositionValidator = v
+		r.composition.Validator = v
 	}
 }
 
@@ -314,7 +316,7 @@ func WithComposer(c Composer) ReconcilerOption {
 
 type composition struct {
 	CompositionFetcher
-	CompositionValidator
+	validation.Validator[v1.Composition]
 }
 
 type environment struct {
@@ -331,23 +333,20 @@ type compositeResource struct {
 
 // NewReconciler returns a new Reconciler of composite resources.
 func NewReconciler(mgr manager.Manager, of resource.CompositeKind, opts ...ReconcilerOption) *Reconciler {
+	return NewReconcilerFromClient(unstructured.NewClient(mgr.GetClient()), of, opts...)
+}
+
+func NewReconcilerFromClient(kube client.Client, of resource.CompositeKind, opts ...ReconcilerOption) *Reconciler {
 	nc := func() resource.Composite {
 		return composite.New(composite.WithGroupVersionKind(schema.GroupVersionKind(of)))
 	}
-	kube := unstructured.NewClient(mgr.GetClient())
-
 	r := &Reconciler{
 		client:       kube,
 		newComposite: nc,
 
 		composition: composition{
 			CompositionFetcher: NewAPICompositionFetcher(kube),
-			CompositionValidator: ValidationChain{
-				CompositionValidatorFn(RejectMixedTemplates),
-				CompositionValidatorFn(RejectDuplicateNames),
-				CompositionValidatorFn(RejectAnonymousTemplatesWithFunctions),
-				CompositionValidatorFn(RejectFunctionsWithoutRequiredConfig),
-			},
+			Validator:          compositionValidation.GetLogicalChecks(),
 		},
 
 		environment: environment{
@@ -482,7 +481,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{Requeue: true}, errors.Wrap(r.client.Status().Update(ctx, xr), errUpdateStatus)
 	}
 
-	// TODO(negz): Composition validation should be handled by a validation
+	// TODO(phisco): refactor it and replace it with a NopValidator as otherwise we run it twice in validation webhook
+	// TODO(negz): Composition compositionValidation should be handled by a compositionValidation
 	// webhook, not by this controller.
 	if err := r.composition.Validate(comp); err != nil {
 		log.Debug(errValidate, "error", err)
