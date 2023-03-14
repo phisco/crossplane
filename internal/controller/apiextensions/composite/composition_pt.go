@@ -18,8 +18,9 @@ package composite
 
 import (
 	"context"
-	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 	"strconv"
+
+	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"

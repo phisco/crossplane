@@ -20,10 +20,11 @@ package composite
 import (
 	"context"
 	"fmt"
-	"github.com/crossplane/crossplane-runtime/pkg/validation"
-	compositionValidation "github.com/crossplane/crossplane/internal/controller/apiextensions/composition/validation"
 	"strconv"
 	"time"
+
+	"github.com/crossplane/crossplane-runtime/pkg/validation"
+	compositionValidation "github.com/crossplane/crossplane/internal/controller/apiextensions/composition/validation"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -336,6 +337,7 @@ func NewReconciler(mgr manager.Manager, of resource.CompositeKind, opts ...Recon
 	return NewReconcilerFromClient(unstructured.NewClient(mgr.GetClient()), of, opts...)
 }
 
+// NewReconcilerFromClient returns a new Reconciler of composite resources that uses the supplied client.
 func NewReconcilerFromClient(kube client.Client, of resource.CompositeKind, opts ...ReconcilerOption) *Reconciler {
 	nc := func() resource.Composite {
 		return composite.New(composite.WithGroupVersionKind(schema.GroupVersionKind(of)))

@@ -35,6 +35,7 @@ const (
 	PatchTypeCombineFromComposite     PatchType = "CombineFromComposite"
 	PatchTypeCombineToComposite       PatchType = "CombineToComposite"
 	PatchTypeCombineToEnvironment     PatchType = "CombineToEnvironment"
+	PatchTypeDefault                            = PatchTypeFromCompositeFieldPath
 )
 
 // A FromFieldPathPolicy determines how to patch from a field path.
@@ -103,12 +104,7 @@ type Patch struct {
 
 // Validate the Patch object.
 func (p *Patch) Validate() error {
-	t := p.Type
-	if t == "" {
-		t = PatchTypeFromCompositeFieldPath
-	}
-
-	switch p.Type {
+	switch p.GetType() {
 	case PatchTypeFromCompositeFieldPath, PatchTypeFromEnvironmentFieldPath, PatchTypeToCompositeFieldPath, PatchTypeToEnvironmentFieldPath:
 		if p.FromFieldPath == nil {
 			return errors.New("fromFieldPath must be set for patch type " + string(p.Type))
@@ -123,6 +119,14 @@ func (p *Patch) Validate() error {
 		}
 	}
 	return nil
+}
+
+// GetType returns the patch type. If the type is not set, it returns the default type.
+func (p *Patch) GetType() PatchType {
+	if p.Type == "" {
+		return PatchTypeDefault
+	}
+	return p.Type
 }
 
 // A CombineVariable defines the source of a value that is combined with

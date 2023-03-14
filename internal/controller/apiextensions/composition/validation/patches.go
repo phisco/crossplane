@@ -1,14 +1,15 @@
 package validation
 
 import (
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/pointer"
+
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composed"
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 	"github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/utils/pointer"
 )
 
 var (
@@ -56,6 +57,7 @@ func ValidatePatches(comp *v1.Composition, gvkToCRD map[schema.GroupVersionKind]
 	}
 	for _, resource := range resources {
 		for _, patch := range resource.Patches {
+			resource := resource
 			if err := ValidatePatch(comp, &resource, patch, gvkToCRD); err != nil {
 				errs = append(errs, err)
 			}
@@ -78,9 +80,8 @@ func ValidatePatch(
 	if err := patch.Validate(); err != nil {
 		return err
 	}
-	switch patch.Type {
-	//TODO implement other patch types
-	case v1.PatchTypeFromCompositeFieldPath, "":
+	switch patch.GetType() { //nolint:exhaustive // TODO implement other patch types
+	case v1.PatchTypeFromCompositeFieldPath:
 		return ValidateFromCompositeFieldPathPatch(
 			patch,
 			gvkToCRD[schema.FromAPIVersionAndKind(
@@ -95,12 +96,13 @@ func ValidatePatch(
 	case v1.PatchTypePatchSet:
 		// already handled
 		return nil
-	default:
-		return nil
 	}
 	return nil
 }
 
+// ValidateFromCompositeFieldPathPatch validates a patch of type FromCompositeFieldPath.
+//
+//nolint:gocyclo // TODO(phisco): refactor this function
 func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions.JSONSchemaProps) error {
 	fromFieldPath := safeDeref(patch.FromFieldPath)
 	toFieldPath := safeDeref(patch.ToFieldPath)
@@ -201,32 +203,39 @@ func validateFieldPath(schema *apiextensions.JSONSchemaProps, fieldPath string) 
 }
 
 // validateFieldPathSegment validates that the given field path segment is valid for the given schema.
-// It returns the schema of the field path segment if it is valid, or an error otherwise.
-func validateFieldPathSegment(current *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (*apiextensions.JSONSchemaProps, bool, error) {
-	if current == nil {
+// It returns the schema for the segment, whether the segment is required, and an error if the segment is invalid.
+//
+//nolint:gocyclo // TODO(phisco): refactor this function
+func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (
+	current *apiextensions.JSONSchemaProps,
+	required bool,
+	err error,
+) {
+	if parent == nil {
 		return nil, false, nil
 	}
 	switch segment.Type {
 	case fieldpath.SegmentField:
-		propType := current.Type
+		propType := parent.Type
 		if propType == "" {
 			propType = "object"
 		}
 		if propType != "object" {
 			return nil, false, errors.Errorf("trying to access field of not an object: %v", propType)
 		}
-		prop, exists := current.Properties[segment.Field]
+		prop, exists := parent.Properties[segment.Field]
 		if !exists {
-			if pointer.BoolDeref(current.XPreserveUnknownFields, false) {
+			// TODO(phisco): handle x-kubernetes-preserve-unknown-fields
+			if pointer.BoolDeref(parent.XPreserveUnknownFields, false) {
 				return nil, false, nil
 			}
-			if current.AdditionalProperties != nil && current.AdditionalProperties.Allows {
-				return current.AdditionalProperties.Schema, false, nil
+			if parent.AdditionalProperties != nil && parent.AdditionalProperties.Allows {
+				return parent.AdditionalProperties.Schema, false, nil
 			}
 			return nil, false, errors.Errorf("unable to find field: %s", segment.Field)
 		}
 		var required bool
-		for _, req := range current.Required {
+		for _, req := range parent.Required {
 			if req == segment.Field {
 				required = true
 				break
@@ -234,16 +243,16 @@ func validateFieldPathSegment(current *apiextensions.JSONSchemaProps, segment fi
 		}
 		return &prop, required, nil
 	case fieldpath.SegmentIndex:
-		if current.Type != "array" {
-			return nil, false, errors.Errorf("accessing by index a %s field", current.Type)
+		if parent.Type != "array" {
+			return nil, false, errors.Errorf("accessing by index a %s field", parent.Type)
 		}
-		if current.Items == nil {
+		if parent.Items == nil {
 			return nil, false, errors.New("no items found in array")
 		}
-		if s := current.Items.Schema; s != nil {
+		if s := parent.Items.Schema; s != nil {
 			return s, false, nil
 		}
-		schemas := current.Items.JSONSchemas
+		schemas := parent.Items.JSONSchemas
 		if len(schemas) < int(segment.Index) {
 			return nil, false, errors.Errorf("no schemas ")
 		}

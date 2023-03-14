@@ -18,8 +18,9 @@ limitations under the License.
 package core
 
 import (
-	"github.com/crossplane/crossplane/apis/apiextensions/v1/validation/composition"
 	"time"
+
+	"github.com/crossplane/crossplane/apis/apiextensions/v1/validation/composition"
 
 	"github.com/alecthomas/kong"
 	"github.com/google/go-containerregistry/pkg/name"
