@@ -18,9 +18,10 @@ package composite
 
 import (
 	"context"
-	"github.com/crossplane/crossplane-runtime/pkg/validation"
 	"testing"
 	"time"
+
+	"github.com/crossplane/crossplane-runtime/pkg/validation"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"

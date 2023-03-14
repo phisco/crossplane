@@ -17,8 +17,9 @@ package composite
 
 import (
 	"context"
-	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 	"sort"
+
+	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

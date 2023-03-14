@@ -18,8 +18,9 @@ package composite
 
 import (
 	"errors"
-	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 	"testing"
+
+	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 
 	fuzz "github.com/AdaLogics/go-fuzz-headers"
 	"k8s.io/apimachinery/pkg/runtime"

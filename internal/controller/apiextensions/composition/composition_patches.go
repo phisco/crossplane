@@ -31,10 +31,10 @@ import (
 )
 
 const (
-	errPatchSetType             = "a patch in a PatchSet cannot be of type PatchSet"
-	errCombineRequiresVariables = "combine patch types require at least one variable"
+	// ErrFmtUndefinedPatchSet is the error format for undefined PatchSet.
+	ErrFmtUndefinedPatchSet = "cannot find PatchSet by name %s"
 
-	ErrFmtUndefinedPatchSet           = "cannot find PatchSet by name %s"
+	errCombineRequiresVariables       = "combine patch types require at least one variable"
 	errFmtInvalidPatchType            = "patch type %s is unsupported"
 	errFmtCombineStrategyNotSupported = "combine strategy %s is not supported"
 	errFmtCombineConfigMissing        = "given combine strategy %s requires configuration"
@@ -83,7 +83,7 @@ func ApplyToObjects(p v1.Patch, cp, cd runtime.Object, only ...v1.PatchType) err
 		return nil
 	}
 
-	switch p.Type {
+	switch p.GetType() {
 	case v1.PatchTypeFromCompositeFieldPath, v1.PatchTypeFromEnvironmentFieldPath:
 		return ApplyFromFieldPathPatch(p, cp, cd)
 	case v1.PatchTypeToCompositeFieldPath, v1.PatchTypeToEnvironmentFieldPath:

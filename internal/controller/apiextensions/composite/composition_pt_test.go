@@ -18,8 +18,9 @@ package composite
 
 import (
 	"context"
-	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 	"testing"
+
+	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"

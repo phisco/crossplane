@@ -19,15 +19,7 @@ package composition
 import (
 	"context"
 	"fmt"
-	"github.com/crossplane/crossplane-runtime/pkg/errors"
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
-	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
-	xprcomposite "github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composite"
-	xprvalidation "github.com/crossplane/crossplane-runtime/pkg/validation"
-	"github.com/crossplane/crossplane/apis/apiextensions/v1"
-	"github.com/crossplane/crossplane/internal/controller/apiextensions/composite"
-	"github.com/crossplane/crossplane/internal/controller/apiextensions/composition/validation"
-	"github.com/crossplane/crossplane/internal/xcrd"
+
 	corev1 "k8s.io/api/core/v1"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	validation2 "k8s.io/apiextensions-apiserver/pkg/apiserver/validation"
@@ -41,6 +33,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/crossplane/crossplane-runtime/pkg/errors"
+	"github.com/crossplane/crossplane-runtime/pkg/resource"
+	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
+	xprcomposite "github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composite"
+	xprvalidation "github.com/crossplane/crossplane-runtime/pkg/validation"
+	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
+	"github.com/crossplane/crossplane/internal/controller/apiextensions/composite"
+	"github.com/crossplane/crossplane/internal/controller/apiextensions/composition/validation"
+	"github.com/crossplane/crossplane/internal/xcrd"
 )
 
 // CustomValidator gathers required information using the provided client.Reader and then use them to render and
@@ -103,6 +105,8 @@ func (c *CustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object
 }
 
 // ValidateCreate validates the Composition by rendering it and then validating the rendered resources.
+//
+//nolint:gocyclo // TODO(phisco): Refactor this function.
 func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) error {
 	comp, ok := obj.(*v1.Composition)
 	if !ok {
@@ -155,7 +159,7 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 
 	// Return if using unsupported/non-deterministic features, e.g. Transforms...
 	if err := comp.IsUsingNonDeterministicTransforms(); err != nil {
-		return nil
+		return nil //nolint:nilerr // we can not check anything else
 	}
 
 	// Mock any required input given their CRDs => crossplane-runtime
