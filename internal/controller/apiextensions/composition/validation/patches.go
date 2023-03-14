@@ -101,8 +101,6 @@ func ValidatePatch(
 }
 
 // ValidateFromCompositeFieldPathPatch validates a patch of type FromCompositeFieldPath.
-//
-
 func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions.JSONSchemaProps) error {
 	fromFieldPath := safeDeref(patch.FromFieldPath)
 	toFieldPath := safeDeref(patch.ToFieldPath)
@@ -120,9 +118,6 @@ func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions
 	if toRequired && !fromRequired {
 		return errors.Errorf("from field path (%s) is not required but to field path is (%s)", fromFieldPath, toFieldPath)
 	}
-	if len(patch.Transforms) == 0 && fromType == toType {
-		return nil
-	}
 
 	if err := validateTransforms(patch.Transforms, fromType, toType); err != nil {
 		return errors.Wrapf(err, "cannot validate transforms for patch from field path (%s) to field path (%s)", fromFieldPath, toFieldPath)
@@ -138,14 +133,24 @@ func validateTransforms(transforms []v1.Transform, fromType, toType string) (err
 		if err != nil {
 			return err
 		}
-		transformedToType = composition.TransformOutputType(transform)
+		transformedToType, err = composition.TransformOutputType(transform)
+		if err != nil {
+			return err
+		}
 	}
-	// TODO(phisco): handle "" types
-	if transformedToType == "any" || transformedToType == "" {
+
+	if transformedToType == "any" {
 		return nil
 	}
+
+	// integer is a subset of number per JSON specification:
+	// https://datatracker.ietf.org/doc/html/draft-zyp-json-schema-04#section-3.5
+	if transformedToType == "integer" && toType == "number" {
+		return nil
+	}
+
 	if transformedToType != toType {
-		return errors.Errorf("from field path and to field path have different types (%s != %s) and transforms do not resolve to the same type", fromType, toType)
+		return errors.Errorf("transformed output type and to field path have different types (%s != %s)", transformedToType, toType)
 	}
 	return nil
 }

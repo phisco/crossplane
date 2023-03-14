@@ -120,20 +120,26 @@ func Resolve(t v1.Transform, input any) (any, error) { //nolint:gocyclo // This 
 }
 
 // TransformOutputType returns the output type of the supplied Transform.
-func TransformOutputType(t v1.Transform) string {
+func TransformOutputType(t v1.Transform) (string, error) {
 	switch t.Type {
 	case v1.TransformTypeMath:
-		return "number"
+		return "number", nil
 	case v1.TransformTypeMap:
-		return TransformOutputTypeAny
+		return TransformOutputTypeAny, nil
 	case v1.TransformTypeMatch:
-		return TransformOutputTypeAny
+		return TransformOutputTypeAny, nil
 	case v1.TransformTypeString:
-		return "string"
+		return "string", nil
 	case v1.TransformTypeConvert:
-		return t.Convert.ToType
+		switch t.Convert.ToType {
+		case "int64", "int":
+			return "integer", nil
+		case "float", "float64":
+			return "number", nil
+		}
+		return t.Convert.ToType, nil
 	}
-	return ""
+	return "", errors.Errorf(errFmtTypeNotSupported, string(t.Type))
 }
 
 // ValidateTransform validates the supplied Transform, taking into consideration also the input type.
@@ -170,7 +176,32 @@ func ValidateTransform(t v1.Transform, fromType string) error {
 			return errors.Errorf(errFmtMatchInputTypeInvalid, fromType)
 		}
 	case v1.TransformTypeConvert:
-		// TODO(phisco): validate convert using converts map above
+		if t.Convert == nil {
+			return errors.Errorf(errFmtTransformConfigMissing, fromType)
+		}
+
+		// TransformOutputTypeAny is non-deterministic so we skip
+		if fromType == TransformOutputTypeAny {
+			return nil
+		}
+
+		if fromType == "integer" || fromType == "number" {
+			fromType = "float64"
+		}
+
+		format := v1.ConvertTransformFormatNone
+		if t.Convert.Format != nil {
+			format = *t.Convert.Format
+		}
+
+		if fromType == t.Convert.ToType {
+			return nil
+		}
+
+		_, ok := conversions[conversionPair{From: fromType, To: t.Convert.ToType, Format: format}]
+		if !ok {
+			return errors.Errorf(errConvertFormatPairNotSupported, fromType, t.Convert.ToType, format)
+		}
 	}
 	return nil
 }
