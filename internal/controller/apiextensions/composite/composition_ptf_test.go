@@ -18,6 +18,7 @@ package composite
 
 import (
 	"context"
+	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 	"net"
 	"sync"
 	"testing"
@@ -864,7 +865,7 @@ func TestPatchAndTransform(t *testing.T) {
 				},
 			},
 			want: want{
-				err: errors.Wrap(errors.Errorf(errFmtUndefinedPatchSet, "nonexistent-patchset"), errInline),
+				err: errors.Wrap(errors.Errorf(xpcomposition.ErrFmtUndefinedPatchSet, "nonexistent-patchset"), errInline),
 			},
 		},
 		// TODO(negz): Test handling of ApplyEnvironmentPatch errors.

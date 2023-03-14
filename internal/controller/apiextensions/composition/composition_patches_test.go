@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package composite
+package composition
 
 import (
 	"encoding/json"
@@ -355,7 +355,7 @@ func TestPatchApply(t *testing.T) {
 			},
 		},
 		"MergeOptionsKeepMapValues": {
-			reason: "Setting mergeOptions.keepMapValues = true adds new map values to existing ones",
+			reason: "Setting MergeOptions.keepMapValues = true adds new map values to existing ones",
 			args: args{
 				patch: v1.Patch{
 					Type:          v1.PatchTypeFromCompositeFieldPath,
@@ -1246,7 +1246,7 @@ func TestComposedTemplates(t *testing.T) {
 				},
 			},
 			want: want{
-				err: errors.Errorf(errFmtUndefinedPatchSet, "patch-set-1"),
+				err: errors.Errorf(ErrFmtUndefinedPatchSet, "patch-set-1"),
 			},
 		},
 		"DefinedPatchSets": {

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package composite
+package composition
 
 import (
 	"crypto/sha1" //nolint:gosec // Not used for secure hashing

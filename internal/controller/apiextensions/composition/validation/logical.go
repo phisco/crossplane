@@ -38,6 +38,7 @@ var (
 		validation.ValidatorFn[v1.Composition](RejectDuplicateNames),
 		validation.ValidatorFn[v1.Composition](RejectAnonymousTemplatesWithFunctions),
 		validation.ValidatorFn[v1.Composition](RejectFunctionsWithoutRequiredConfig),
+		validation.ValidatorFn[v1.Composition](RejectInvalidPatchSets),
 	}
 )
 
@@ -127,6 +128,24 @@ func RejectFunctionsWithoutRequiredConfig(comp *v1.Composition) error {
 			}
 		default:
 			return errors.Errorf(errFmtUnknownFnType, fn.Type)
+		}
+	}
+	return nil
+}
+
+// RejectInvalidPatchSets validates that the supplied Composition does not attempt
+// to nest patch sets and that patch set names are unique within the Composition.
+func RejectInvalidPatchSets(comp *v1.Composition) error {
+	names := map[string]bool{}
+	for _, s := range comp.Spec.PatchSets {
+		if ok := names[s.Name]; ok {
+			return errors.Errorf("patch set names must be unique within their Composition")
+		}
+		names[s.Name] = true
+		for _, p := range s.Patches {
+			if p.Type == v1.PatchTypePatchSet {
+				return errors.Errorf("cannot nest patch sets")
+			}
 		}
 	}
 	return nil

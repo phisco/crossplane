@@ -18,6 +18,7 @@ package composite
 
 import (
 	"context"
+	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -87,7 +88,7 @@ func TestPTCompose(t *testing.T) {
 				},
 			},
 			want: want{
-				err: errors.Wrap(errors.Errorf(errFmtUndefinedPatchSet, "nonexistent-patchset"), errInline),
+				err: errors.Wrap(errors.Errorf(xpcomposition.ErrFmtUndefinedPatchSet, "nonexistent-patchset"), errInline),
 			},
 		},
 		"AssociateTemplatesError": {

@@ -5,6 +5,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composed"
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
+	"github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/pointer"
@@ -47,9 +48,13 @@ var (
 )
 
 // ValidatePatches validates the patches of a composition.
-func ValidatePatches(comp *v1.Composition, gvkToCRD map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition) []error {
-	var errs []error
-	for _, resource := range comp.Spec.Resources {
+func ValidatePatches(comp *v1.Composition, gvkToCRD map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition) (errs []error) {
+	// Let's first dereference patchSets
+	resources, err := composition.ComposedTemplates(comp.Spec)
+	if err != nil {
+		return []error{errors.Wrap(err, "cannot get composed templates")}
+	}
+	for _, resource := range resources {
 		for _, patch := range resource.Patches {
 			if err := ValidatePatch(comp, &resource, patch, gvkToCRD); err != nil {
 				errs = append(errs, err)
@@ -87,6 +92,9 @@ func ValidatePatch(
 				res.GetKind(),
 			)].Spec.Validation.OpenAPIV3Schema,
 		)
+	case v1.PatchTypePatchSet:
+		// already handled
+		return nil
 	default:
 		return nil
 	}
@@ -110,16 +118,51 @@ func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions
 	if toRequired && !fromRequired {
 		return errors.Errorf("from field path (%s) is not required but to field path is (%s)", fromFieldPath, toFieldPath)
 	}
-	if fromType == toType {
+	if len(patch.Transforms) == 0 && fromType == toType {
 		return nil
 	}
-	if len(patch.Transforms) == 0 {
-		return errors.Errorf("from field path (%s) and to field path (%s) have different types (%s != %s) and no transforms are provided", fromFieldPath, toFieldPath, fromType, toType)
+
+	transformedToType, err := resolveTransformsType(patch.Transforms, fromType)
+	if err != nil {
+		return err
+	}
+	// TODO(phisco): handle "" types
+	if transformedToType == "*" || transformedToType == "" {
+		return nil
+	}
+	if transformedToType != toType {
+		return errors.Errorf("from field path (%s) and to field path (%s) have different types (%s != %s) and transforms do not resolve to the same type", fromFieldPath, toFieldPath, fromType, toType)
 	}
 
-	// TODO handle transforms
-
 	return nil
+}
+
+func resolveTransformsType(transforms []v1.Transform, fromType string) (transformedToType string, err error) {
+	transformedToType = fromType
+	for _, transform := range transforms {
+		transformedToType, err = resolveTransformType(transform)
+		if err != nil {
+			return "", err
+		}
+	}
+	return transformedToType, nil
+}
+
+func resolveTransformType(transform v1.Transform) (string, error) {
+	switch transform.Type {
+	case v1.TransformTypeString:
+		return "string", nil
+	case v1.TransformTypeMath:
+		return "number", nil
+	case v1.TransformTypeConvert:
+		if transform.Convert == nil {
+			return "", errors.New("missing convert transform")
+		}
+		return transform.Convert.ToType, nil
+	case v1.TransformTypeMap, v1.TransformTypeMatch:
+		return "*", nil
+	}
+	return "", nil
 }
 
 func safeDeref[T any](ptr *T) T {

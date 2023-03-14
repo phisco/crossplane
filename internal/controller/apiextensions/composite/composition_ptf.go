@@ -17,6 +17,7 @@ package composite
 
 import (
 	"context"
+	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 	"sort"
 
 	"google.golang.org/grpc"
@@ -336,7 +337,7 @@ func (c *PTFComposer) Compose(ctx context.Context, xr resource.Composite, req Co
 	// was passed to this method will have a stale meta.resourceVersion. This
 	// Subsequent attempts to update that object will therefore fail. This
 	// should be okay; the caller should keep trying until this is a no-op.
-	ao := mergeOptions(filterPatches(allPatches(state.ComposedResources), patchTypesToXR()...))
+	ao := xpcomposition.MergeOptions(filterPatches(allPatches(state.ComposedResources), patchTypesToXR()...))
 	if err := c.client.Apply(ctx, state.Composite, ao...); err != nil {
 		return CompositionResult{}, errors.Wrap(err, errApplyXR)
 	}
@@ -358,7 +359,7 @@ func (c *PTFComposer) Compose(ctx context.Context, xr resource.Composite, req Co
 
 		ao := []resource.ApplyOption{resource.MustBeControllableBy(state.Composite.GetUID())}
 		if cd.Template != nil {
-			ao = append(ao, mergeOptions(filterPatches(cd.Template.Patches, patchTypesFromXR()...))...)
+			ao = append(ao, xpcomposition.MergeOptions(filterPatches(cd.Template.Patches, patchTypesFromXR()...))...)
 		}
 		if err := c.client.Apply(ctx, cd.Resource, ao...); err != nil {
 			return CompositionResult{}, errors.Wrapf(err, errFmtApplyCD, cd.ResourceName)
@@ -520,7 +521,7 @@ func NewXRCDPatchAndTransformer(composite, composed Renderer) *XRCDPatchAndTrans
 // patches and transforms within the CompositionRequest.
 func (pt *XRCDPatchAndTransformer) PatchAndTransform(ctx context.Context, req CompositionRequest, s *PTFCompositionState) error {
 	// Inline PatchSets from Composition Spec before composing resources.
-	ct, err := ComposedTemplates(req.Composition.Spec)
+	ct, err := xpcomposition.ComposedTemplates(req.Composition.Spec)
 	if err != nil {
 		return errors.Wrap(err, errInline)
 	}
@@ -529,7 +530,7 @@ func (pt *XRCDPatchAndTransformer) PatchAndTransform(ctx context.Context, req Co
 	// resources.
 	if req.Environment != nil && req.Composition.Spec.Environment != nil {
 		for i, p := range req.Composition.Spec.Environment.Patches {
-			if err := ApplyEnvironmentPatch(p, s.Composite, req.Environment); err != nil {
+			if err := xpcomposition.ApplyEnvironmentPatch(p, s.Composite, req.Environment); err != nil {
 				return errors.Wrapf(err, errFmtPatchEnvironment, i)
 			}
 		}
