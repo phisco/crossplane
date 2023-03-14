@@ -536,7 +536,7 @@ func (pt *XRCDPatchAndTransformer) PatchAndTransform(ctx context.Context, req Co
 	}
 
 	// Render composite and composed resources using any P&T resource templates.
-	// Note that we require templates to be named; a CompositionValidator should
+	// Note that we require templates to be named; a Validator should
 	// enforce this.
 	for i := range ct {
 		t := ct[i]
