@@ -199,6 +199,103 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 				}),
 			},
 		},
+		{
+			name: "Should accept a Composition with a combine patch, if validation mode is strict and all CRDs are found",
+			args: args{
+				existingObjs: []runtime.Object{
+					defaultCompositeCrdBuilder().withOption(func(crd *extv1.CustomResourceDefinition) {
+						spec := crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["spec"]
+						spec.Properties["someOtherOtherField"] = extv1.JSONSchemaProps{
+							Type: "string",
+						}
+
+						spec.Required = append(spec.Required,
+							"someOtherOtherField")
+						crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["spec"] = spec
+					}).build(),
+					defaultManagedCrdBuilder().build(),
+				},
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
+					Type: v1.PatchTypeCombineFromComposite,
+					Combine: &v1.Combine{
+						Variables: []v1.CombineVariable{
+							{
+								FromFieldPath: "spec.someField",
+							},
+							{
+								FromFieldPath: "spec.someOtherOtherField",
+							},
+						},
+						Strategy: v1.CombineStrategyString,
+						String: &v1.StringCombine{
+							Format: "%s-%s",
+						},
+					},
+					ToFieldPath: toPointer("spec.someOtherField"),
+				}),
+			},
+		},
+		{
+			name:    "Should reject a Composition with a combine patch with mismatched required fields, if validation mode is strict and all CRDs are found",
+			wantErr: true,
+			args: args{
+				existingObjs: []runtime.Object{
+					defaultCompositeCrdBuilder().withOption(func(crd *extv1.CustomResourceDefinition) {
+						spec := crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["spec"]
+						spec.Properties["someNonReqField"] = extv1.JSONSchemaProps{
+							Type: "string",
+						}
+					}).build(),
+					defaultManagedCrdBuilder().build(),
+				},
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
+					Type: v1.PatchTypeCombineFromComposite,
+					Combine: &v1.Combine{
+						Variables: []v1.CombineVariable{
+							{
+								FromFieldPath: "spec.someField",
+							},
+							{
+								FromFieldPath: "spec.someNonReqField",
+							},
+						},
+						Strategy: v1.CombineStrategyString,
+						String: &v1.StringCombine{
+							Format: "%s-%s",
+						},
+					},
+					ToFieldPath: toPointer("spec.someOtherField"),
+				}),
+			},
+		},
+		{
+			name:    "Should reject a Composition with a combine patch with missing fields, if validation mode is strict and all CRDs are found",
+			wantErr: true,
+			args: args{
+				existingObjs: []runtime.Object{
+					defaultCompositeCrdBuilder().build(),
+					defaultManagedCrdBuilder().build(),
+				},
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
+					Type: v1.PatchTypeCombineFromComposite,
+					Combine: &v1.Combine{
+						Variables: []v1.CombineVariable{
+							{
+								FromFieldPath: "spec.someField",
+							},
+							{
+								FromFieldPath: "spec.someNonDefinedField",
+							},
+						},
+						Strategy: v1.CombineStrategyString,
+						String: &v1.StringCombine{
+							Format: "%s-%s",
+						},
+					},
+					ToFieldPath: toPointer("spec.someOtherField"),
+				}),
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -260,6 +357,9 @@ func defaultCompositeCrdBuilder() *crdBuilder {
 		},
 		Properties: map[string]extv1.JSONSchemaProps{
 			"someField": {
+				Type: "string",
+			},
+			"someNonRequiredField": {
 				Type: "string",
 			},
 		},

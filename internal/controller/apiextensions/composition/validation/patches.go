@@ -93,10 +93,101 @@ func ValidatePatch(
 				res.GetKind(),
 			)].Spec.Validation.OpenAPIV3Schema,
 		)
-	case v1.PatchTypePatchSet:
-		// already handled
-		return nil
+	case v1.PatchTypeToCompositeFieldPath:
+		return ValidateFromCompositeFieldPathPatch(
+			patch,
+			gvkToCRD[schema.FromAPIVersionAndKind(
+				res.GetAPIVersion(),
+				res.GetKind(),
+			)].Spec.Validation.OpenAPIV3Schema,
+			gvkToCRD[schema.FromAPIVersionAndKind(
+				comp.Spec.CompositeTypeRef.APIVersion,
+				comp.Spec.CompositeTypeRef.Kind,
+			)].Spec.Validation.OpenAPIV3Schema,
+		)
+	case v1.PatchTypeCombineFromComposite:
+		return ValidateCombineFromCompositePathPatch(
+			patch,
+			gvkToCRD[schema.FromAPIVersionAndKind(
+				comp.Spec.CompositeTypeRef.APIVersion,
+				comp.Spec.CompositeTypeRef.Kind,
+			)].Spec.Validation.OpenAPIV3Schema,
+			gvkToCRD[schema.FromAPIVersionAndKind(
+				res.GetAPIVersion(),
+				res.GetKind(),
+			)].Spec.Validation.OpenAPIV3Schema)
+	case v1.PatchTypeCombineToComposite:
+		return ValidateCombineFromCompositePathPatch(
+			patch,
+			gvkToCRD[schema.FromAPIVersionAndKind(
+				res.GetAPIVersion(),
+				res.GetKind(),
+			)].Spec.Validation.OpenAPIV3Schema,
+			gvkToCRD[schema.FromAPIVersionAndKind(
+				comp.Spec.CompositeTypeRef.APIVersion,
+				comp.Spec.CompositeTypeRef.Kind,
+			)].Spec.Validation.OpenAPIV3Schema)
 	}
+	return nil
+}
+
+// ValidateCombineFromCompositePathPatch validates Combine Patch types, by going through and validating the fromField
+// path variables, checking if they all need to be required, checking if the right combine strategy is set and
+// validating transforms.
+//
+//nolint:gocyclo // TODO refactor it a bit, its just over the limit
+func ValidateCombineFromCompositePathPatch(
+	patch v1.Patch,
+	from *apiextensions.JSONSchemaProps,
+	to *apiextensions.JSONSchemaProps,
+) error {
+	fromRequired := true
+	for _, variable := range patch.Combine.Variables {
+		fromFieldPath := variable.FromFieldPath
+		_, required, err := validateFieldPath(from, fromFieldPath)
+		if err != nil {
+			return err
+		}
+		fromRequired = fromRequired && required
+	}
+
+	if patch.ToFieldPath == nil {
+		return errors.Errorf("%s is required by type %s", "ToFieldPath", patch.Type)
+	}
+
+	toFieldPath := safeDeref(patch.ToFieldPath)
+	toType, toRequired, err := validateFieldPath(to, toFieldPath)
+	if err != nil {
+		return err
+	}
+
+	if toRequired && !fromRequired {
+		return errors.Errorf("from field paths (%v) are not required but to field path is (%s)",
+			patch.Combine.Variables, toFieldPath)
+	}
+
+	var fromType string
+	switch patch.Combine.Strategy {
+	case v1.CombineStrategyString:
+		if patch.Combine.String == nil {
+			return errors.Errorf("given combine strategy %s requires configuration", patch.Combine.Strategy)
+		}
+		fromType = "string"
+	default:
+		return errors.Errorf("combine strategy %s is not supported", patch.Combine.Strategy)
+	}
+
+	// TODO(lsviben) check if we could validate the patch combine format
+
+	if err := validateTransforms(patch.Transforms, fromType, toType); err != nil {
+		return errors.Wrapf(
+			err,
+			"cannot validate transforms for patch from field paths (%v) to field path (%s)",
+			patch.Combine.Variables,
+			toFieldPath,
+		)
+	}
+
 	return nil
 }
 
