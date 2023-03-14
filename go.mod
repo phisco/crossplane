@@ -2,7 +2,7 @@ module github.com/crossplane/crossplane
 
 go 1.20
 
-replace github.com/crossplane/crossplane-runtime => ../crossplane-runtime
+replace github.com/crossplane/crossplane-runtime => github.com/phisco/crossplane-runtime v0.0.0-20230314114712-9edec8e20134
 
 require (
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230106234847-43070de90fa1
