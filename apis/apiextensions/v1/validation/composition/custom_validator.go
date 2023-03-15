@@ -18,6 +18,7 @@ package composition
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -34,7 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/crossplane/crossplane-runtime/pkg/errors"
+	xperrors "github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
 	xprcomposite "github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composite"
@@ -110,13 +111,13 @@ func (c *CustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object
 func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) error {
 	comp, ok := obj.(*v1.Composition)
 	if !ok {
-		return errors.New("not a v1 Composition")
+		return xperrors.New("not a v1 Composition")
 	}
 
 	// Get the composition validation mode from annotation
 	validationMode, err := comp.GetValidationMode()
 	if err != nil {
-		return errors.Wrap(err, "cannot get validation mode")
+		return xperrors.Wrap(err, "cannot get validation mode")
 	}
 
 	// Get all the needed CRDs, Composite Resource, Managed resources ... ? Error out if missing in strict mode
@@ -128,11 +129,11 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 		}
 		// If any of the errors is not a NotFound error, error out
 		if !apierrors.IsNotFound(err) {
-			return errors.Errorf("there were some errors while getting the needed CRDs: %v", errs)
+			return xperrors.Errorf("there were some errors while getting the needed CRDs: %v", errs)
 		}
 		// If any of the needed CRDs is not found, error out if strict mode is enabled, otherwise continue
 		if validationMode == v1.CompositionValidationModeStrict {
-			return errors.Wrap(err, "cannot get needed CRDs and strict mode is enabled")
+			return xperrors.Wrap(err, "cannot get needed CRDs and strict mode is enabled")
 		}
 		if validationMode == v1.CompositionValidationModeLoose {
 			looseModeSkip = true
@@ -143,7 +144,7 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 
 	// Perform logical checks
 	if err := validation.GetLogicalChecks().Validate(comp); err != nil {
-		return errors.Wrap(err, "invalid composition")
+		return xperrors.Wrap(err, "invalid composition")
 	}
 
 	// Given that some requirement is missing, and we are in loose mode, skip the rest of the validation
@@ -154,7 +155,7 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 
 	// Validate patches given the above CRDs, skip if any of the required CRDs is not available
 	if errs := validation.ValidatePatches(comp, gvkToCRDs); len(errs) != 0 {
-		return errors.Errorf("there were some errors while validating the patches: %v", errs)
+		return apierrors.NewBadRequest(fmt.Sprintf("there were some errors while validating the patches:\n%s", errors.Join(errs...)))
 	}
 
 	// Return if using unsupported/non-deterministic features, e.g. Transforms...
@@ -170,7 +171,7 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 	compositeRes.SetNamespace("test")
 	compositeRes.SetCompositionReference(&corev1.ObjectReference{Name: comp.GetName()})
 	if err := xprvalidation.MockRequiredFields(compositeRes, gvkToCRDs[compositeResGVK].Spec.Validation.OpenAPIV3Schema); err != nil {
-		return errors.Wrap(err, "cannot mock required fields")
+		return apierrors.NewBadRequest(xperrors.Wrap(err, "cannot mock required fields").Error())
 	}
 
 	mockClient := c.clientBuilder.withObjects(
@@ -182,7 +183,7 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 	r := composite.NewReconcilerFromClient(mockClient, resource.CompositeKind(schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
 		comp.Spec.CompositeTypeRef.Kind)))
 	if _, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "fake", Namespace: "test"}}); err != nil {
-		return errors.Wrap(err, "cannot render resources")
+		return apierrors.NewBadRequest(xperrors.Wrap(err, "cannot render resources").Error())
 	}
 
 	fakeClient := mockClient.GetClient()
@@ -198,7 +199,7 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 		composedRes.SetGroupVersionKind(gvk)
 		err = fakeClient.List(ctx, composedRes, client.MatchingLabels{xcrd.LabelKeyNamePrefixForComposed: "fake"})
 		if err != nil {
-			return errors.Wrap(err, "cannot list composed resources")
+			return apierrors.NewBadRequest(xperrors.Wrap(err, "cannot list composed resources").Error())
 		}
 		for _, cd := range composedRes.Items {
 			vs, _, err := validation2.NewSchemaValidator(crd.Spec.Validation)
@@ -215,10 +216,10 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 		}
 	}
 	if len(validationErrs) != 0 {
-		return errors.Errorf("there were some errors while validating the rendered resources: %v", validationErrs)
+		return apierrors.NewBadRequest(fmt.Sprintf("there were some errors while validating the rendered resources:\n%s", errors.Join(validationErrs...)))
 	}
 	if len(validationWarns) != 0 {
-		fmt.Printf("there were some warnings while validating the rendered resources: %v\n", validationWarns)
+		fmt.Printf("there were some warnings while validating the rendered resources:\n%s", errors.Join(validationWarns...))
 	}
 
 	return nil
