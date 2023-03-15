@@ -60,7 +60,7 @@ func (c *CustomValidator) getNeededCRDs(ctx context.Context, comp *v1.Compositio
 // the provided client.
 func (c *CustomValidator) getCRDForGVK(ctx context.Context, gvk *schema.GroupVersionKind) (*apiextensions.CustomResourceDefinition, error) {
 	crds := extv1.CustomResourceDefinitionList{}
-	if err := c.clientBuilder.build().List(ctx, &crds, client.MatchingFields{"spec.group": gvk.Group},
+	if err := c.reader.List(ctx, &crds, client.MatchingFields{"spec.group": gvk.Group},
 		client.MatchingFields{"spec.names.kind": gvk.Kind}); err != nil {
 		return nil, err
 	}

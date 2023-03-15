@@ -20,19 +20,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	validation2 "k8s.io/apiextensions-apiserver/pkg/apiserver/validation"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	unstructured2 "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	xperrors "github.com/crossplane/crossplane-runtime/pkg/errors"
@@ -49,7 +51,8 @@ import (
 // CustomValidator gathers required information using the provided client.Reader and then use them to render and
 // validated a Composition.
 type CustomValidator struct {
-	clientBuilder *clientWithFallbackReaderBuilder
+	reader client.Reader
+	scheme *runtime.Scheme
 }
 
 // SetupWithManager sets up the CustomValidator with the provided manager, setting up all the required indexes it requires.
@@ -66,7 +69,8 @@ func (c *CustomValidator) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	c.clientBuilder = newClientWithFallbackReaderBuilder(mgr)
+	c.scheme = mgr.GetScheme()
+	c.reader = unstructured.NewClient(mgr.GetClient())
 
 	return ctrl.NewWebhookManagedBy(mgr).
 		WithValidator(c).
@@ -74,25 +78,139 @@ func (c *CustomValidator) SetupWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-type clientWithFallbackReaderBuilder struct {
-	builder *fake.ClientBuilder
-	reader  client.Reader
+type cacheClient struct {
+	cache map[schema.GroupVersionKind]map[types.NamespacedName]client.Object
 }
 
-func newClientWithFallbackReaderBuilder(mgr manager.Manager) *clientWithFallbackReaderBuilder {
-	return &clientWithFallbackReaderBuilder{
-		builder: fake.NewClientBuilder().WithScheme(mgr.GetScheme()),
-		reader:  unstructured.NewClient(mgr.GetClient()),
+func (c *cacheClient) Get(_ context.Context, key client.ObjectKey, out client.Object, opts ...client.GetOption) error {
+	if c.cache == nil {
+		return nil
 	}
+	if gvk, ok := c.cache[out.GetObjectKind().GroupVersionKind()]; ok {
+		if o, ok := gvk[key]; ok {
+			// We have a cache hit, let's copy the object into the provided one
+			// Copied from controller-runtime CacheReader implementation
+			err := deepCopyInto(out, o)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
-func (b *clientWithFallbackReaderBuilder) withObjects(objs ...client.Object) *clientWithFallbackReaderBuilder {
-	return &clientWithFallbackReaderBuilder{builder: b.builder.WithObjects(objs...), reader: b.reader}
+func deepCopyInto(out client.Object, o client.Object) error {
+	outVal := reflect.ValueOf(out)
+	objVal := reflect.ValueOf(o)
+	if !objVal.Type().AssignableTo(outVal.Type()) {
+		return fmt.Errorf("cache had type %s, but %s was asked for", objVal.Type(), outVal.Type())
+	}
+	reflect.Indirect(outVal).Set(reflect.Indirect(objVal))
+	return nil
 }
 
-// Build returns a new ClientWithFallbackReader.
-func (b *clientWithFallbackReaderBuilder) build() *ClientWithFallbackReader {
-	return NewClientWithFallbackReader(b.builder.Build(), b.reader)
+func (c *cacheClient) List(_ context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	if c.cache == nil {
+		return nil
+	}
+	gvk, ok := c.cache[list.GetObjectKind().GroupVersionKind()]
+	if !ok {
+		return nil
+	}
+	opt := &client.ListOptions{}
+	opt.ApplyOptions(opts)
+	objs := make([]runtime.Object, 0, len(gvk))
+	for _, o := range gvk {
+		if opt.Namespace != "" && o.GetNamespace() != opt.Namespace {
+			continue
+		}
+		if opt.LabelSelector != nil && !opt.LabelSelector.Matches(labels.Set(o.GetLabels())) {
+			continue
+		}
+		// TODO: handle rest of the options
+		objs = append(objs, o)
+	}
+	return apimeta.SetList(list, objs)
+}
+
+func (c *cacheClient) Create(_ context.Context, obj client.Object, opts ...client.CreateOption) error {
+	if c.cache == nil {
+		c.cache = make(map[schema.GroupVersionKind]map[types.NamespacedName]client.Object)
+	}
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if _, ok := c.cache[gvk]; !ok {
+		c.cache[gvk] = make(map[types.NamespacedName]client.Object)
+	}
+	c.cache[gvk][types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}] = obj
+	return nil
+}
+
+func (c *cacheClient) Delete(_ context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	if c.cache == nil {
+		return nil
+	}
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if _, ok := c.cache[gvk]; !ok {
+		return nil
+	}
+	delete(c.cache[gvk], types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()})
+	return nil
+}
+
+func (c *cacheClient) Update(_ context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if c.cache == nil {
+		return nil
+	}
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if _, ok := c.cache[gvk]; !ok {
+		return nil
+	}
+	c.cache[gvk][types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}] = obj
+	return nil
+}
+
+func (c *cacheClient) Patch(_ context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c *cacheClient) DeleteAllOf(_ context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+	if c.cache == nil {
+		return nil
+	}
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if _, ok := c.cache[gvk]; !ok {
+		return nil
+	}
+	opt := &client.DeleteAllOfOptions{}
+	opt.ApplyOptions(opts)
+	for k, o := range c.cache[gvk] {
+		if opt.Namespace != "" && o.GetNamespace() != opt.Namespace {
+			continue
+		}
+		if opt.LabelSelector != nil && !opt.LabelSelector.Matches(labels.Set(o.GetLabels())) {
+			continue
+		}
+		delete(c.cache[gvk], k)
+	}
+	return nil
+}
+
+func (c *cacheClient) Status() client.SubResourceWriter {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c *cacheClient) SubResource(_ string) client.SubResourceClient {
+	return &nopSubResourceClient{}
+}
+
+func (c *cacheClient) Scheme() *runtime.Scheme {
+	return nil
+}
+
+func (c *cacheClient) RESTMapper() meta.RESTMapper {
+	return nil
 }
 
 // ValidateUpdate is a no-op for now.
@@ -106,8 +224,6 @@ func (c *CustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object
 }
 
 // ValidateCreate validates the Composition by rendering it and then validating the rendered resources.
-//
-//nolint:gocyclo // TODO(phisco): Refactor this function.
 func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) error {
 	comp, ok := obj.(*v1.Composition)
 	if !ok {
@@ -140,22 +256,37 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 		}
 	}
 
-	// From here on we should refactor the code to allow using it from linters/Lsp
-
-	// Perform logical checks
-	if err := validation.GetLogicalChecks().Validate(comp); err != nil {
-		return xperrors.Wrap(err, "invalid composition")
-	}
-
 	// Given that some requirement is missing, and we are in loose mode, skip the rest of the validation
 	if looseModeSkip && validationMode == v1.CompositionValidationModeLoose {
 		// TODO: emit a warning here
 		return nil
 	}
 
+	// From here on we should refactor the code to allow using it from linters/Lsp
+	if err := ValidateComposition(ctx, comp, gvkToCRDs, NewClientWithFallbackReader(&cacheClient{}, c.reader)); err != nil {
+		return apierrors.NewBadRequest(err.Error())
+	}
+	return nil
+}
+
+// ValidateComposition validates the Composition by rendering it and then validating the rendered resources using the
+// provided CustomValidator.
+//
+//nolint:gocyclo // TODO(phisco): Refactor this function.
+func ValidateComposition(
+	ctx context.Context,
+	comp *v1.Composition,
+	gvkToCRDs map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition,
+	c client.Client,
+) error {
+	// Perform logical checks
+	if err := validation.GetLogicalChecks().Validate(comp); err != nil {
+		return xperrors.Wrap(err, "invalid composition")
+	}
+
 	// Validate patches given the above CRDs, skip if any of the required CRDs is not available
 	if errs := validation.ValidatePatches(comp, gvkToCRDs); len(errs) != 0 {
-		return apierrors.NewBadRequest(fmt.Sprintf("there were some errors while validating the patches:\n%s", errors.Join(errs...)))
+		return xperrors.Errorf("there were some errors while validating the patches:\n%s", errors.Join(errs...))
 	}
 
 	// Return if using unsupported/non-deterministic features, e.g. Transforms...
@@ -166,27 +297,34 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 	// Mock any required input given their CRDs => crossplane-runtime
 	compositeResGVK := schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
 		comp.Spec.CompositeTypeRef.Kind)
+	compositeResCRD, ok := gvkToCRDs[compositeResGVK]
+	if !ok {
+		return xperrors.Errorf("cannot find CRD for composite resource %s", compositeResGVK)
+	}
 	compositeRes := xprcomposite.New(xprcomposite.WithGroupVersionKind(compositeResGVK))
 	compositeRes.SetName("fake")
 	compositeRes.SetNamespace("test")
 	compositeRes.SetCompositionReference(&corev1.ObjectReference{Name: comp.GetName()})
-	if err := xprvalidation.MockRequiredFields(compositeRes, gvkToCRDs[compositeResGVK].Spec.Validation.OpenAPIV3Schema); err != nil {
-		return apierrors.NewBadRequest(xperrors.Wrap(err, "cannot mock required fields").Error())
+	if err := xprvalidation.MockRequiredFields(compositeRes, compositeResCRD.Spec.Validation.OpenAPIV3Schema); err != nil {
+		return xperrors.Wrap(err, "cannot mock required fields")
 	}
 
-	mockClient := c.clientBuilder.withObjects(
-		// mocked Composite resource
-		compositeRes,
-		comp,
-	).build()
+	// create or update all required resources
+	for _, obj := range []client.Object{compositeRes, comp} {
+		err := c.Create(ctx, obj)
+		if apierrors.IsAlreadyExists(err) {
+			if err := c.Update(ctx, obj); err != nil {
+				return err
+			}
+		}
+	}
+
 	// Render resources => reuse existing logic
-	r := composite.NewReconcilerFromClient(mockClient, resource.CompositeKind(schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
+	r := composite.NewReconcilerFromClient(c, resource.CompositeKind(schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
 		comp.Spec.CompositeTypeRef.Kind)))
 	if _, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "fake", Namespace: "test"}}); err != nil {
-		return apierrors.NewBadRequest(xperrors.Wrap(err, "cannot render resources").Error())
+		return xperrors.Wrap(err, "cannot render resources")
 	}
-
-	fakeClient := mockClient.GetClient()
 
 	// Validate resources given their CRDs => crossplane-runtime
 	var validationErrs []error
@@ -197,9 +335,9 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 		}
 		composedRes := &unstructured2.UnstructuredList{}
 		composedRes.SetGroupVersionKind(gvk)
-		err = fakeClient.List(ctx, composedRes, client.MatchingLabels{xcrd.LabelKeyNamePrefixForComposed: "fake"})
+		err := c.List(ctx, composedRes, client.MatchingLabels{xcrd.LabelKeyNamePrefixForComposed: "fake"})
 		if err != nil {
-			return apierrors.NewBadRequest(xperrors.Wrap(err, "cannot list composed resources").Error())
+			return xperrors.Wrap(err, "cannot list composed resources")
 		}
 		for _, cd := range composedRes.Items {
 			vs, _, err := validation2.NewSchemaValidator(crd.Spec.Validation)
@@ -216,7 +354,7 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 		}
 	}
 	if len(validationErrs) != 0 {
-		return apierrors.NewBadRequest(fmt.Sprintf("there were some errors while validating the rendered resources:\n%s", errors.Join(validationErrs...)))
+		return xperrors.Errorf("there were some errors while validating the rendered resources:\n%s", errors.Join(validationErrs...))
 	}
 	if len(validationWarns) != 0 {
 		fmt.Printf("there were some warnings while validating the rendered resources:\n%s", errors.Join(validationWarns...))

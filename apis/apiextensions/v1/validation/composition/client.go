@@ -70,7 +70,6 @@ func (m *ClientWithFallbackReader) Update(ctx context.Context, obj client.Object
 // Patch patches the object using the primary client. It will always first try to create the object and then patch it,
 // given that the resource may not exist yet for the primary client. E.g. a resource was read from the reader and then patched.
 func (m *ClientWithFallbackReader) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-	_ = m.Create(ctx, obj)
 	return m.client.Patch(ctx, obj, patch, opts...)
 }
 

@@ -80,53 +80,45 @@ func ValidatePatch(
 	if err := patch.Validate(); err != nil {
 		return err
 	}
+
+	compositeCRD, compositeOK := gvkToCRD[schema.FromAPIVersionAndKind(
+		comp.Spec.CompositeTypeRef.APIVersion,
+		comp.Spec.CompositeTypeRef.Kind,
+	)]
+	if !compositeOK {
+		return errors.Errorf("cannot find composite type %s", comp.Spec.CompositeTypeRef)
+	}
+	resourceCRD, resourceOK := gvkToCRD[schema.FromAPIVersionAndKind(
+		res.GetAPIVersion(),
+		res.GetKind(),
+	)]
+	if !resourceOK {
+		return errors.Errorf("cannot find resource type %s", res.GroupVersionKind())
+	}
+
 	switch patch.GetType() { //nolint:exhaustive // TODO implement other patch types
 	case v1.PatchTypeFromCompositeFieldPath:
 		return ValidateFromCompositeFieldPathPatch(
 			patch,
-			gvkToCRD[schema.FromAPIVersionAndKind(
-				comp.Spec.CompositeTypeRef.APIVersion,
-				comp.Spec.CompositeTypeRef.Kind,
-			)].Spec.Validation.OpenAPIV3Schema,
-			gvkToCRD[schema.FromAPIVersionAndKind(
-				res.GetAPIVersion(),
-				res.GetKind(),
-			)].Spec.Validation.OpenAPIV3Schema,
+			compositeCRD.Spec.Validation.OpenAPIV3Schema,
+			resourceCRD.Spec.Validation.OpenAPIV3Schema,
 		)
 	case v1.PatchTypeToCompositeFieldPath:
 		return ValidateFromCompositeFieldPathPatch(
 			patch,
-			gvkToCRD[schema.FromAPIVersionAndKind(
-				res.GetAPIVersion(),
-				res.GetKind(),
-			)].Spec.Validation.OpenAPIV3Schema,
-			gvkToCRD[schema.FromAPIVersionAndKind(
-				comp.Spec.CompositeTypeRef.APIVersion,
-				comp.Spec.CompositeTypeRef.Kind,
-			)].Spec.Validation.OpenAPIV3Schema,
+			resourceCRD.Spec.Validation.OpenAPIV3Schema,
+			compositeCRD.Spec.Validation.OpenAPIV3Schema,
 		)
 	case v1.PatchTypeCombineFromComposite:
 		return ValidateCombineFromCompositePathPatch(
 			patch,
-			gvkToCRD[schema.FromAPIVersionAndKind(
-				comp.Spec.CompositeTypeRef.APIVersion,
-				comp.Spec.CompositeTypeRef.Kind,
-			)].Spec.Validation.OpenAPIV3Schema,
-			gvkToCRD[schema.FromAPIVersionAndKind(
-				res.GetAPIVersion(),
-				res.GetKind(),
-			)].Spec.Validation.OpenAPIV3Schema)
+			compositeCRD.Spec.Validation.OpenAPIV3Schema,
+			resourceCRD.Spec.Validation.OpenAPIV3Schema)
 	case v1.PatchTypeCombineToComposite:
 		return ValidateCombineFromCompositePathPatch(
 			patch,
-			gvkToCRD[schema.FromAPIVersionAndKind(
-				res.GetAPIVersion(),
-				res.GetKind(),
-			)].Spec.Validation.OpenAPIV3Schema,
-			gvkToCRD[schema.FromAPIVersionAndKind(
-				comp.Spec.CompositeTypeRef.APIVersion,
-				comp.Spec.CompositeTypeRef.Kind,
-			)].Spec.Validation.OpenAPIV3Schema)
+			resourceCRD.Spec.Validation.OpenAPIV3Schema,
+			compositeCRD.Spec.Validation.OpenAPIV3Schema)
 	}
 	return nil
 }
