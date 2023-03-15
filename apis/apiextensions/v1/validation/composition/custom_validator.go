@@ -18,8 +18,10 @@ package composition
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	jsonpatch "github.com/evanphx/json-patch"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -170,8 +172,38 @@ func (c *cacheClient) Update(_ context.Context, obj client.Object, opts ...clien
 }
 
 func (c *cacheClient) Patch(_ context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-	//TODO implement me
-	panic("implement me")
+	if c.cache == nil {
+		return nil
+	}
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if _, ok := c.cache[gvk]; !ok {
+		return nil
+	}
+	switch patch.Type() {
+	case types.JSONPatchType:
+		patchBytes, err := patch.Data(obj)
+		if err != nil {
+			return err
+		}
+		patchObj := &jsonpatch.Patch{}
+		if err := json.Unmarshal(patchBytes, patchObj); err != nil {
+			return err
+		}
+		originalBytes, err := json.Marshal(obj)
+		if err != nil {
+			return err
+		}
+		modifiedBytes, err := patchObj.Apply(originalBytes)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(modifiedBytes, obj); err != nil {
+			return err
+		}
+		c.cache[gvk][types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}] = obj
+	}
+	// TODO: handle other patch types
+	return nil
 }
 
 func (c *cacheClient) DeleteAllOf(_ context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {

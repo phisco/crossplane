@@ -784,11 +784,11 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &CustomValidator{
-				reader: fake.NewClientBuilder().WithIndex(&extv1.CustomResourceDefinition{}, "spec.group", func(object client.Object) []string {
+				reader: fake.NewClientBuilder().WithScheme(s).WithIndex(&extv1.CustomResourceDefinition{}, "spec.group", func(object client.Object) []string {
 					return []string{object.(*extv1.CustomResourceDefinition).Spec.Group}
 				}).WithIndex(&extv1.CustomResourceDefinition{}, "spec.names.kind", func(object client.Object) []string {
 					return []string{object.(*extv1.CustomResourceDefinition).Spec.Names.Kind}
-				}).WithScheme(s).WithRuntimeObjects(tt.args.existingObjs...).Build(),
+				}).WithRuntimeObjects(tt.args.existingObjs...).Build(),
 				scheme: s,
 			}
 			if err := c.ValidateCreate(context.TODO(), tt.args.obj); (err != nil) != tt.wantErr {
