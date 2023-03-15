@@ -29,29 +29,28 @@ func TestValidateComposition(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "Should reject a Composition if validation mode is strict and no CRDs are found",
+			name:    "Should reject a Composition if no CRDs are available",
 			wantErr: true,
 			args: args{
 				comp:      buildDefaultComposition(t, v1.CompositionValidationModeStrict, map[string]any{"someOtherField": "test"}),
 				gvkToCRDs: nil,
 			},
 		}, {
-			name:    "Should accept a valid Composition if validation mode is strict and all CRDs are found",
+			name:    "Should accept a valid Composition if all CRDs are available",
 			wantErr: false,
 			args: args{
 				gvkToCRDs: defaultGVKToCRDs(),
 				comp:      buildDefaultComposition(t, v1.CompositionValidationModeStrict, map[string]any{"someOtherField": "test"}),
 			},
 		}, {
-			// HERE
-			name:    "Should reject a Composition not defining a required field in a resource if validation mode is strict and all CRDs are found",
+			name:    "Should reject a Composition not defining a required field in a resource if all CRDs are available",
 			wantErr: true,
 			args: args{
 				gvkToCRDs: defaultGVKToCRDs(),
 				comp:      buildDefaultComposition(t, v1.CompositionValidationModeStrict, nil),
 			},
 		}, {
-			name:    "Should accept a Composition with a required field defined only by a patch if validation mode is strict and all CRDs are found",
+			name:    "Should accept a Composition with a required field defined only by a patch if all CRDs are available",
 			wantErr: false,
 			args: args{
 				gvkToCRDs: defaultGVKToCRDs(),
@@ -62,7 +61,7 @@ func TestValidateComposition(t *testing.T) {
 				}),
 			},
 		}, {
-			name:    "Should reject a Composition with a patch using a field not allowed by the the Composite resource, if validation mode is strict and all CRDs are found",
+			name:    "Should reject a Composition with a patch using a field not allowed by the the Composite resource, if all CRDs are found",
 			wantErr: true,
 			args: args{
 				gvkToCRDs: defaultGVKToCRDs(),
@@ -73,7 +72,7 @@ func TestValidateComposition(t *testing.T) {
 				}),
 			},
 		}, {
-			name:    "Should reject a Composition with a patch using a field not allowed by the schema of the Managed resource, if validation mode is strict and all CRDs are found",
+			name:    "Should reject a Composition with a patch using a field not allowed by the schema of the Managed resource, if all CRDs are found",
 			wantErr: true,
 			args: args{
 				gvkToCRDs: defaultGVKToCRDs(),
@@ -84,7 +83,7 @@ func TestValidateComposition(t *testing.T) {
 				}),
 			},
 		}, {
-			name:    "Should reject a Composition with a patch between two different types, if validation mode is strict and all CRDs are found",
+			name:    "Should reject a Composition with a patch between two different types, if all CRDs are found",
 			wantErr: true,
 			args: args{
 				gvkToCRDs: buildGvkToCRDs(
@@ -101,35 +100,6 @@ func TestValidateComposition(t *testing.T) {
 					ToFieldPath:   toPointer("spec.someOtherField"),
 				}),
 			},
-			/*	 {
-				name: "Should reject a Composition with an invalid patch due to a wrong field from a Managed resource, if validation mode is loose and only the Managed resource CRDs are found",
-				// TODO(phisco): currently we don't handle loose mode with partially missing inputs
-				wantErr: true,
-				args: args{
-					gvkToCRDs: []runtime.Object{
-						defaultManagedCrdBuilder().build(),
-					},
-					comp: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
-						Type:          v1.PatchTypeFromCompositeFieldPath,
-						FromFieldPath: toPointer("spec.someWrongField"),
-						ToFieldPath:   toPointer("spec.someOtherWrongField"),
-					}),
-				},
-			}, {
-				name:    "Should reject a Composition with an invalid patch due to a wrong field from a Composite resource, if validation mode is loose and only the Composed resource CRDs are found",
-				// TODO(phisco): currently we don't handle loose mode with partially missing inputs
-				wantErr: true,
-				args: args{
-					gvkToCRDs: []runtime.Object{
-						defaultCompositeCrdBuilder().build(),
-					},
-					comp: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
-						Type:          v1.PatchTypeFromCompositeFieldPath,
-						FromFieldPath: toPointer("spec.someWrongField"),
-						ToFieldPath:   toPointer("spec.someOtherWrongField"),
-					}),
-				},
-			*/
 		}, {
 			name:    "Should reject a Composition with a math transformation resulting in the wrong final type, if validation mode is strict and all CRDs are found",
 			wantErr: true,
@@ -149,7 +119,7 @@ func TestValidateComposition(t *testing.T) {
 			},
 		},
 		{
-			name:    "Should reject a Composition with a convert transformation resulting in the wrong final type, if validation mode is strict and all CRDs are found",
+			name:    "Should reject a Composition with a convert transformation resulting in the wrong final type, if all CRDs are found",
 			wantErr: true,
 			args: args{
 				gvkToCRDs: defaultGVKToCRDs(),
@@ -167,7 +137,7 @@ func TestValidateComposition(t *testing.T) {
 			},
 		},
 		{
-			name: "Should accept a Composition with a combine patch, if validation mode is strict and all CRDs are found",
+			name: "Should accept a Composition with a combine patch, if all CRDs are found",
 			args: args{
 				gvkToCRDs: buildGvkToCRDs(
 					defaultCompositeCrdBuilder().withOption(func(crd *extv1.CustomResourceDefinition) {
@@ -203,7 +173,7 @@ func TestValidateComposition(t *testing.T) {
 			},
 		},
 		{
-			name:    "Should reject a Composition with a combine patch with mismatched required fields, if validation mode is strict and all CRDs are found",
+			name:    "Should reject a Composition with a combine patch with mismatched required fields, if all CRDs are found",
 			wantErr: true,
 			args: args{
 				gvkToCRDs: buildGvkToCRDs(
