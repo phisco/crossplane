@@ -67,7 +67,11 @@ func ValidateComposition(
 		return errs
 	}
 
-	// TODO(lsviben) validate ConnectionDetails, ReadinessCheck
+	// TODO(lsviben) validate ReadinessCheck
+	if connErrs := ValidateConnectionDetails(comp, gvkToCRDs); len(connErrs) > 0 {
+		errs = append(errs, connErrs...)
+		return errs
+	}
 
 	// Return if using unsupported/non-deterministic features, e.g. Transforms...
 	if err := comp.IsUsingNonDeterministicTransforms(); err != nil {
