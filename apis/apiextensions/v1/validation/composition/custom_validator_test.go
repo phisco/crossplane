@@ -186,12 +186,20 @@ func (b *crdBuilder) buildExtV1() *extv1.CustomResourceDefinition {
 	return crd
 }
 
-func buildDefaultComposition(t *testing.T, validationMode v1.CompositionValidationMode, spec map[string]any, patches ...v1.Patch) *v1.Composition {
+type compositionBuilderOption func(c *v1.Composition)
+
+func withPatches(index int, patches ...v1.Patch) compositionBuilderOption {
+	return func(c *v1.Composition) {
+		c.Spec.Resources[index].Patches = patches
+	}
+}
+
+func buildDefaultComposition(t *testing.T, validationMode v1.CompositionValidationMode, spec map[string]any, opts ...compositionBuilderOption) *v1.Composition {
 	t.Helper()
 	if spec == nil {
 		spec = map[string]any{}
 	}
-	return &v1.Composition{
+	c := &v1.Composition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "testComposition",
 			Annotations: map[string]string{
@@ -217,11 +225,15 @@ func buildDefaultComposition(t *testing.T, validationMode v1.CompositionValidati
 							"spec": spec,
 						}),
 					},
-					Patches: patches,
 				},
 			},
 		},
 	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 func buildGvkToCRDs(crds ...*apiextensions.CustomResourceDefinition) map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition {
@@ -293,33 +305,33 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 			wantErr: false,
 			args: args{
 				existingObjs: defaultCRDs(),
-				obj: buildDefaultComposition(t, v1.CompositionValidationModeStrict, nil, v1.Patch{
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeStrict, nil, withPatches(0, v1.Patch{
 					Type:          v1.PatchTypeFromCompositeFieldPath,
 					FromFieldPath: toPointer("spec.someField"),
 					ToFieldPath:   toPointer("spec.someOtherField"),
-				}),
+				})),
 			},
 		}, {
 			name:    "Should reject a Composition with a patch using a field not allowed by the the Composite resource, if validation mode is strict and all CRDs are found",
 			wantErr: true,
 			args: args{
 				existingObjs: defaultCRDs(),
-				obj: buildDefaultComposition(t, v1.CompositionValidationModeStrict, nil, v1.Patch{
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeStrict, nil, withPatches(0, v1.Patch{
 					Type:          v1.PatchTypeFromCompositeFieldPath,
 					FromFieldPath: toPointer("spec.someWrongField"),
 					ToFieldPath:   toPointer("spec.someOtherField"),
-				}),
+				})),
 			},
 		}, {
 			name:    "Should reject a Composition with a patch using a field not allowed by the schema of the Managed resource, if validation mode is strict and all CRDs are found",
 			wantErr: true,
 			args: args{
 				existingObjs: defaultCRDs(),
-				obj: buildDefaultComposition(t, v1.CompositionValidationModeStrict, map[string]any{"someOtherField": "test"}, v1.Patch{
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeStrict, map[string]any{"someOtherField": "test"}, withPatches(0, v1.Patch{
 					Type:          v1.PatchTypeFromCompositeFieldPath,
 					FromFieldPath: toPointer("spec.someField"),
 					ToFieldPath:   toPointer("spec.someOtherWrongField"),
-				}),
+				})),
 			},
 		}, {
 			name:    "Should reject a Composition with a patch between two different types, if validation mode is strict and all CRDs are found",
@@ -333,11 +345,11 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 					}).buildExtV1(),
 					defaultManagedCrdBuilder().buildExtV1(),
 				},
-				obj: buildDefaultComposition(t, v1.CompositionValidationModeStrict, nil, v1.Patch{
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeStrict, nil, withPatches(0, v1.Patch{
 					Type:          v1.PatchTypeFromCompositeFieldPath,
 					FromFieldPath: toPointer("spec.someField"),
 					ToFieldPath:   toPointer("spec.someOtherField"),
-				}),
+				})),
 			},
 		}, {
 			name:    "Should accept a Composition with valid patches, if validation mode is loose and only the Managed resource CRDs are found",
@@ -350,11 +362,11 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 						}
 					}).buildExtV1(),
 				},
-				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, withPatches(0, v1.Patch{
 					Type:          v1.PatchTypeFromCompositeFieldPath,
 					FromFieldPath: toPointer("spec.someWrongField"),
 					ToFieldPath:   toPointer("spec.someOtherField"),
-				}),
+				})),
 			},
 			/*		}, {
 						name: "Should reject a Composition with an invalid patch due to a wrong field from a Managed resource, if validation mode is loose and only the Managed resource CRDs are found",
@@ -364,7 +376,7 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 							existingObjs: []runtime.Object{
 								defaultManagedCrdBuilder().build(),
 							},
-							obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
+							obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, withPatches(0, v1.Patch{
 								Type:          v1.PatchTypeFromCompositeFieldPath,
 								FromFieldPath: toPointer("spec.someWrongField"),
 								ToFieldPath:   toPointer("spec.someOtherWrongField"),
@@ -378,7 +390,7 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 							existingObjs: []runtime.Object{
 								defaultCompositeCrdBuilder().build(),
 							},
-							obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
+							obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, withPatches(0, v1.Patch{
 								Type:          v1.PatchTypeFromCompositeFieldPath,
 								FromFieldPath: toPointer("spec.someWrongField"),
 								ToFieldPath:   toPointer("spec.someOtherWrongField"),
@@ -390,18 +402,18 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 			wantErr: false,
 			args: args{
 				existingObjs: nil,
-				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, withPatches(0, v1.Patch{
 					Type:          v1.PatchTypeFromCompositeFieldPath,
 					FromFieldPath: toPointer("spec.someWrongField"),
 					ToFieldPath:   toPointer("spec.someOtherWrongField"),
-				}),
+				})),
 			},
 		}, {
 			name:    "Should reject a Composition with a math transformation resulting in the wrong final type, if validation mode is strict and all CRDs are found",
 			wantErr: true,
 			args: args{
 				existingObjs: defaultCRDs(),
-				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, withPatches(0, v1.Patch{
 					Type:          v1.PatchTypeFromCompositeFieldPath,
 					FromFieldPath: toPointer("spec.someField"),
 					ToFieldPath:   toPointer("spec.someOtherField"),
@@ -411,7 +423,7 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 							Multiply: toPointer(int64(2)),
 						},
 					}},
-				}),
+				})),
 			},
 		},
 		{
@@ -419,7 +431,7 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 			wantErr: true,
 			args: args{
 				existingObjs: defaultCRDs(),
-				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, withPatches(0, v1.Patch{
 					Type:          v1.PatchTypeFromCompositeFieldPath,
 					FromFieldPath: toPointer("spec.someField"),
 					ToFieldPath:   toPointer("spec.someOtherField"),
@@ -429,7 +441,7 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 							ToType: "int64",
 						},
 					}},
-				}),
+				})),
 			},
 		},
 		{
@@ -448,7 +460,7 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 					}).buildExtV1(),
 					defaultManagedCrdBuilder().buildExtV1(),
 				},
-				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, withPatches(0, v1.Patch{
 					Type: v1.PatchTypeCombineFromComposite,
 					Combine: &v1.Combine{
 						Variables: []v1.CombineVariable{
@@ -465,7 +477,7 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 						},
 					},
 					ToFieldPath: toPointer("spec.someOtherField"),
-				}),
+				})),
 			},
 		},
 		{
@@ -481,7 +493,7 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 					}).buildExtV1(),
 					defaultManagedCrdBuilder().buildExtV1(),
 				},
-				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, withPatches(0, v1.Patch{
 					Type: v1.PatchTypeCombineFromComposite,
 					Combine: &v1.Combine{
 						Variables: []v1.CombineVariable{
@@ -498,7 +510,7 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 						},
 					},
 					ToFieldPath: toPointer("spec.someOtherField"),
-				}),
+				})),
 			},
 		},
 		{
@@ -509,7 +521,7 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 					defaultCompositeCrdBuilder().buildExtV1(),
 					defaultManagedCrdBuilder().buildExtV1(),
 				},
-				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, v1.Patch{
+				obj: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, withPatches(0, v1.Patch{
 					Type: v1.PatchTypeCombineFromComposite,
 					Combine: &v1.Combine{
 						Variables: []v1.CombineVariable{
@@ -526,7 +538,7 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 						},
 					},
 					ToFieldPath: toPointer("spec.someOtherField"),
-				}),
+				})),
 			},
 		},
 	}
