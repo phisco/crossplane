@@ -1,5 +1,5 @@
 /*
-Copyright 202333he Crossplane Authors.
+Copyright 2023 the Crossplane Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import (
 
 	xperrors "github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
+
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 )
 
@@ -116,6 +117,7 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 	}
 
 	// From here on we should refactor the code to allow using it from linters/Lsp
+	// TODO (lsviben) figure out how to emit warnings instead of errors in case of WARN state (strict, but just warnings)
 	if errs := ValidateComposition(ctx, comp, gvkToCRDs, validation.NewClientWithFallbackReader(&validation.MapClient{}, c.reader)); len(errs) != 0 {
 		return apierrors.NewInvalid(comp.GroupVersionKind().GroupKind(), comp.GetName(), errs)
 	}

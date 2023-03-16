@@ -73,7 +73,6 @@ func (in *Composition) GetValidationMode() (CompositionValidationMode, error) {
 
 // IsUsingNonDeterministicTransforms returns true if the composition is using any non-deterministic transformation.
 func (in *Composition) IsUsingNonDeterministicTransforms() error {
-	//TODO: implement this
 	if len(in.Spec.Functions) > 0 {
 		return errors.New("composition is using functions")
 	}
