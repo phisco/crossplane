@@ -45,10 +45,12 @@ func ValidateComposition(
 	}
 
 	// Validate patches given the above CRDs, skip if any of the required CRDs is not available
-	if patchErrs := validation.ValidatePatches(comp, gvkToCRDs); len(patchErrs) > 0 {
+	if patchErrs := ValidatePatches(comp, gvkToCRDs); len(patchErrs) > 0 {
 		errs = append(errs, patchErrs...)
 		return errs
 	}
+
+	// TODO(lsviben) validate ConnectionDetails, ReadinessCheck
 
 	// Return if using unsupported/non-deterministic features, e.g. Transforms...
 	if err := comp.IsUsingNonDeterministicTransforms(); err != nil {
@@ -56,6 +58,7 @@ func ValidateComposition(
 	}
 
 	// Mock any required input given their CRDs => crossplane-runtime
+	// TODO(lsviben) refactor
 	compositeResGVK := schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
 		comp.Spec.CompositeTypeRef.Kind)
 	compositeResCRD, ok := gvkToCRDs[compositeResGVK]
@@ -98,8 +101,9 @@ func ValidateComposition(
 		return errs
 	}
 
-	// Validate resources given their CRDs => crossplane-runtime
+	// Validate resources given their CRDs
 	var validationWarns []error
+	// TODO (lsviben) we are currently validating only things we have schema for, instead of everything created by the reconciler
 	for gvk, crd := range gvkToCRDs {
 		if gvk == compositeResGVK {
 			continue
@@ -121,7 +125,6 @@ func ValidateComposition(
 			if r.HasErrors() {
 				sourceResourceIndex := findSourceResourceIndex(comp.Spec.Resources, cd)
 				for _, err := range r.Errors {
-					// TODO(phisco): we should return the source resource that is causing this issue
 					cdString, marshalErr := json.Marshal(cd)
 					if marshalErr != nil {
 						cdString = []byte(fmt.Sprintf("%+v", cd))
@@ -148,6 +151,7 @@ func ValidateComposition(
 		return errs
 	}
 	if len(validationWarns) != 0 {
+		// TODO (lsviben) send the warnings back
 		fmt.Printf("there were some warnings while validating the rendered resources:\n%s", errors.Join(validationWarns...))
 	}
 

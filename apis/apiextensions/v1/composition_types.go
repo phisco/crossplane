@@ -193,6 +193,16 @@ func (ct *ComposedTemplate) InitBaseObject() error {
 	return nil
 }
 
+// GetObjectGVK returns the object GVK of the composed template.
+// Uses the cached object if it is available, or parses the raw Base
+// otherwise.
+func (ct *ComposedTemplate) GetObjectGVK() (schema.GroupVersionKind, error) {
+	if err := ct.InitBaseObject(); err != nil {
+		return schema.GroupVersionKind{}, err
+	}
+	return ct.Base.Object.GetObjectKind().GroupVersionKind(), nil
+}
+
 // ReadinessCheckType is used for readiness check types.
 type ReadinessCheckType string
 

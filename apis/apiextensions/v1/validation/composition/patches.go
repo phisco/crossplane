@@ -11,7 +11,7 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
-	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composed"
+
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 	"github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 )
@@ -96,7 +96,7 @@ func ValidatePatch( //nolint:gocyclo // TODO(phisco): refactor
 	}
 	resource := comp.Spec.Resources[resourceNumber]
 	patch := resource.Patches[patchNumber]
-	res, err := composed.ParseToUnstructured(resource.Base.Raw)
+	res, err := resource.GetBaseObject()
 	if err != nil {
 		return field.Invalid(field.NewPath("spec", "resource").Index(resourceNumber).Child("base"), resource.Base, err.Error())
 	}
@@ -108,16 +108,14 @@ func ValidatePatch( //nolint:gocyclo // TODO(phisco): refactor
 	if !compositeOK {
 		return field.InternalError(field.NewPath("spec"), errors.Errorf("cannot find composite type %s", comp.Spec.CompositeTypeRef))
 	}
-	resourceCRD, resourceOK := gvkToCRD[schema.FromAPIVersionAndKind(
-		res.GetAPIVersion(),
-		res.GetKind(),
-	)]
+	resourceCRD, resourceOK := gvkToCRD[res.GetObjectKind().GroupVersionKind()]
 	if !resourceOK {
-		return field.InternalError(field.NewPath("spec"), errors.Errorf("cannot find resource type %s", res.GroupVersionKind()))
+		return field.InternalError(field.NewPath("spec"), errors.Errorf("cannot find resource type %s", res.GetObjectKind().GroupVersionKind()))
 	}
 
 	var validationErr error
 	switch patch.GetType() { //nolint:exhaustive // TODO implement other patch types
+	// TODO return fromType toType and validate transforms in one place
 	case v1.PatchTypeFromCompositeFieldPath:
 		validationErr = ValidateFromCompositeFieldPathPatch(
 			patch,
@@ -308,7 +306,7 @@ func validateFieldPath(schema *apiextensions.JSONSchemaProps, fieldPath string) 
 // validateFieldPathSegment validates that the given field path segment is valid for the given schema.
 // It returns the schema for the segment, whether the segment is required, and an error if the segment is invalid.
 //
-//nolint:gocyclo // TODO(phisco): refactor this function
+//nolint:gocyclo // TODO(phisco): refactor this function, add test cases
 func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (
 	current *apiextensions.JSONSchemaProps,
 	required bool,
@@ -337,6 +335,7 @@ func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fie
 			}
 			return nil, false, errors.Errorf("unable to find field: %s", segment.Field)
 		}
+		// TODO(lsviben): what about CEL?
 		var required bool
 		for _, req := range parent.Required {
 			if req == segment.Field {
