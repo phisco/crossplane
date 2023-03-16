@@ -17,6 +17,8 @@ limitations under the License.
 package validation
 
 import (
+	"k8s.io/apimachinery/pkg/util/validation/field"
+
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/validation"
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
@@ -24,12 +26,10 @@ import (
 
 // Error strings
 const (
-	errMixed                    = "cannot mix named and anonymous resource templates - ensure all resource templates are named"
-	errDuplicate                = "resource template names must be unique within their Composition"
-	errFnsRequireNames          = "cannot use functions with anonymous resource templates - ensure all resource templates are named"
-	errFnMissingContainerConfig = "functions of type: Container must specify container configuration"
-
-	errFmtUnknownFnType = "unknown function type %q"
+	errMixed           = "cannot mix named and anonymous resource templates - ensure all resource templates are named"
+	errDuplicate       = "resource template names must be unique within their Composition"
+	errFnsRequireNames = "cannot use functions with anonymous resource templates - ensure all resource templates are named"
+	errNestedPatches   = "cannot use patches within patches"
 )
 
 var (
@@ -56,60 +56,58 @@ func GetLogicalChecks() validation.Chain[v1.Composition] {
 // beginning or middle of the resources array using the anonymous composer would
 // be destructive, because it assumes template N always corresponds to existing
 // template N.
-func RejectMixedTemplates(comp *v1.Composition) error {
+func RejectMixedTemplates(comp *v1.Composition) field.ErrorList {
 	named := 0
 	for _, tmpl := range comp.Spec.Resources {
 		if tmpl.Name != nil {
 			named++
+		} else {
+			named--
 		}
 	}
 
-	// We're using only anonymous templates.
-	if named == 0 {
+	if l := len(comp.Spec.Resources); named == l || named == -l {
+		// All templates are named or all templates are anonymous.
 		return nil
 	}
 
-	// We're using only named templates.
-	if named == len(comp.Spec.Resources) {
-		return nil
-	}
-
-	return errors.New(errMixed)
+	return field.ErrorList{field.Invalid(field.NewPath("spec", "resources"), comp.Spec.Resources, errMixed)}
 }
 
 // RejectDuplicateNames validates that all template names are unique within the
 // supplied Composition.
-func RejectDuplicateNames(comp *v1.Composition) error {
+func RejectDuplicateNames(comp *v1.Composition) (errs field.ErrorList) {
 	seen := map[string]bool{}
-	for _, tmpl := range comp.Spec.Resources {
+	for i, tmpl := range comp.Spec.Resources {
 		if tmpl.Name == nil {
 			continue
 		}
 		if seen[*tmpl.Name] {
-			return errors.New(errDuplicate)
+			errs = append(errs, field.Invalid(field.NewPath("spec", "resources").Index(i), tmpl.Name, errDuplicate))
+			continue
 		}
 		seen[*tmpl.Name] = true
 	}
-	return nil
+	return errs
 }
 
 // RejectAnonymousTemplatesWithFunctions validates that all templates are named
 // when Composition Functions are in use. This is necessary for the
 // FunctionComposer to be able to associate entries in the spec.resources array
 // with entries in a FunctionIO's observed and desired arrays.
-func RejectAnonymousTemplatesWithFunctions(comp *v1.Composition) error {
+func RejectAnonymousTemplatesWithFunctions(comp *v1.Composition) (errs field.ErrorList) {
 	if len(comp.Spec.Functions) == 0 {
 		// Composition Functions do not appear to be in use.
 		return nil
 	}
 
-	for _, tmpl := range comp.Spec.Resources {
+	for i, tmpl := range comp.Spec.Resources {
 		if tmpl.Name == nil {
-			return errors.New(errFnsRequireNames)
+			errs = append(errs, field.Invalid(field.NewPath("spec", "resources").Index(i), tmpl.Name, errFnsRequireNames))
 		}
 	}
 
-	return nil
+	return errs
 }
 
 // TODO(negz): Ideally we'd apply the below pattern everywhere in our APIs, i.e.
@@ -119,34 +117,27 @@ func RejectAnonymousTemplatesWithFunctions(comp *v1.Composition) error {
 // RejectFunctionsWithoutRequiredConfig rejects Composition Functions missing
 // the configuration for their type - for example a function of type: Container
 // must include a container configuration.
-func RejectFunctionsWithoutRequiredConfig(comp *v1.Composition) error {
-	for _, fn := range comp.Spec.Functions {
-		switch fn.Type {
-		case v1.FunctionTypeContainer:
-			if fn.Container == nil {
-				return errors.New(errFnMissingContainerConfig)
-			}
-		default:
-			return errors.Errorf(errFmtUnknownFnType, fn.Type)
+func RejectFunctionsWithoutRequiredConfig(comp *v1.Composition) (errs field.ErrorList) {
+	for i, fn := range comp.Spec.Functions {
+		if err := fn.Validate(); err != nil {
+			errs = append(errs, field.Invalid(field.NewPath("spec", "functions").Index(i), fn, err.Error()))
 		}
 	}
-	return nil
+	return errs
 }
 
 // RejectInvalidPatchSets validates that the supplied Composition does not attempt
 // to nest patch sets and that patch set names are unique within the Composition.
-func RejectInvalidPatchSets(comp *v1.Composition) error {
-	names := map[string]bool{}
-	for _, s := range comp.Spec.PatchSets {
-		if ok := names[s.Name]; ok {
-			return errors.Errorf("patch set names must be unique within their Composition")
-		}
-		names[s.Name] = true
-		for _, p := range s.Patches {
+func RejectInvalidPatchSets(comp *v1.Composition) (errs field.ErrorList) {
+	for i, s := range comp.Spec.PatchSets {
+		for j, p := range s.Patches {
 			if p.Type == v1.PatchTypePatchSet {
-				return errors.Errorf("cannot nest patch sets")
+				errs = append(errs, field.Invalid(field.NewPath("spec", "patchSets").Index(i).Child("patches").Index(j), p, errors.New(errNestedPatches).Error()))
+			}
+			if err := p.Validate(); err != nil {
+				errs = append(errs, field.Invalid(field.NewPath("spec", "patchSets").Index(i).Child("patches").Index(j), p, err.Error()))
 			}
 		}
 	}
-	return nil
+	return errs
 }

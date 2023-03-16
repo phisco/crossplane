@@ -77,7 +77,7 @@ func TestValidateComposition(t *testing.T) {
 				comp: buildDefaultComposition(t, v1.CompositionValidationModeStrict, map[string]any{"someOtherField": "test"}, v1.Patch{
 					Type:          v1.PatchTypeFromCompositeFieldPath,
 					FromFieldPath: toPointer("spec.someField"),
-					ToFieldPath:   toPointer("spec.someOtherWrongField"),
+					ToFieldPath:   toPointer("spec.soapis/apiextensions/v1/composition_types.go:31meOtherWrongField"),
 				}),
 			},
 		}, {

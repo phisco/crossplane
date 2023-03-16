@@ -1,8 +1,12 @@
 package validation
 
 import (
+	"encoding/json"
+	"fmt"
+
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/pointer"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
@@ -49,16 +53,28 @@ var (
 )
 
 // ValidatePatches validates the patches of a composition.
-func ValidatePatches(comp *v1.Composition, gvkToCRD map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition) (errs []error) {
+func ValidatePatches(comp *v1.Composition, gvkToCRD map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition) (errs field.ErrorList) {
+	for i, resource := range comp.Spec.Resources {
+		for j, patch := range resource.Patches {
+			if err := patch.Validate(); err != nil {
+				errs = append(errs, field.Invalid(field.NewPath("spec", "resources").Index(i).Child("patches").Index(j), patch, err.Error()))
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return errs
+	}
+
 	// Let's first dereference patchSets
 	resources, err := composition.ComposedTemplates(comp.Spec)
 	if err != nil {
-		return []error{errors.Wrap(err, "cannot get composed templates")}
+		errs = append(errs, field.Invalid(field.NewPath("spec", "resources"), comp.Spec.Resources, err.Error()))
+		return errs
 	}
-	for _, resource := range resources {
-		for _, patch := range resource.Patches {
-			resource := resource
-			if err := ValidatePatch(comp, &resource, patch, gvkToCRD); err != nil {
+	for i, resource := range resources {
+		for j := range resource.Patches {
+			if err := ValidatePatch(comp, i, j, gvkToCRD); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -67,18 +83,22 @@ func ValidatePatches(comp *v1.Composition, gvkToCRD map[schema.GroupVersionKind]
 }
 
 // ValidatePatch validates a patch.
-func ValidatePatch(
+func ValidatePatch( //nolint:gocyclo // TODO(phisco): refactor
 	comp *v1.Composition,
-	resource *v1.ComposedTemplate,
-	patch v1.Patch,
+	resourceNumber, patchNumber int,
 	gvkToCRD map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition,
-) error {
+) *field.Error {
+	if len(comp.Spec.Resources) <= resourceNumber {
+		return field.InternalError(field.NewPath("spec", "resource").Index(resourceNumber), errors.Errorf("cannot find resource"))
+	}
+	if len(comp.Spec.Resources[resourceNumber].Patches) <= patchNumber {
+		return field.InternalError(field.NewPath("spec", "resource").Index(resourceNumber).Child("patches").Index(patchNumber), errors.Errorf("cannot find patch"))
+	}
+	resource := comp.Spec.Resources[resourceNumber]
+	patch := resource.Patches[patchNumber]
 	res, err := composed.ParseToUnstructured(resource.Base.Raw)
 	if err != nil {
-		return err
-	}
-	if err := patch.Validate(); err != nil {
-		return err
+		return field.Invalid(field.NewPath("spec", "resource").Index(resourceNumber).Child("base"), resource.Base, err.Error())
 	}
 
 	compositeCRD, compositeOK := gvkToCRD[schema.FromAPIVersionAndKind(
@@ -86,41 +106,53 @@ func ValidatePatch(
 		comp.Spec.CompositeTypeRef.Kind,
 	)]
 	if !compositeOK {
-		return errors.Errorf("cannot find composite type %s", comp.Spec.CompositeTypeRef)
+		return field.InternalError(field.NewPath("spec"), errors.Errorf("cannot find composite type %s", comp.Spec.CompositeTypeRef))
 	}
 	resourceCRD, resourceOK := gvkToCRD[schema.FromAPIVersionAndKind(
 		res.GetAPIVersion(),
 		res.GetKind(),
 	)]
 	if !resourceOK {
-		return errors.Errorf("cannot find resource type %s", res.GroupVersionKind())
+		return field.InternalError(field.NewPath("spec"), errors.Errorf("cannot find resource type %s", res.GroupVersionKind()))
 	}
 
+	var validationErr error
 	switch patch.GetType() { //nolint:exhaustive // TODO implement other patch types
 	case v1.PatchTypeFromCompositeFieldPath:
-		return ValidateFromCompositeFieldPathPatch(
+		validationErr = ValidateFromCompositeFieldPathPatch(
 			patch,
 			compositeCRD.Spec.Validation.OpenAPIV3Schema,
 			resourceCRD.Spec.Validation.OpenAPIV3Schema,
 		)
 	case v1.PatchTypeToCompositeFieldPath:
-		return ValidateFromCompositeFieldPathPatch(
+		validationErr = ValidateFromCompositeFieldPathPatch(
 			patch,
 			resourceCRD.Spec.Validation.OpenAPIV3Schema,
 			compositeCRD.Spec.Validation.OpenAPIV3Schema,
 		)
 	case v1.PatchTypeCombineFromComposite:
-		return ValidateCombineFromCompositePathPatch(
+		validationErr = ValidateCombineFromCompositePathPatch(
 			patch,
 			compositeCRD.Spec.Validation.OpenAPIV3Schema,
 			resourceCRD.Spec.Validation.OpenAPIV3Schema)
 	case v1.PatchTypeCombineToComposite:
-		return ValidateCombineFromCompositePathPatch(
+		validationErr = ValidateCombineFromCompositePathPatch(
 			patch,
 			resourceCRD.Spec.Validation.OpenAPIV3Schema,
 			compositeCRD.Spec.Validation.OpenAPIV3Schema)
 	}
+	if validationErr != nil {
+		return field.Invalid(field.NewPath("spec", "resource").Index(resourceNumber).Child("patches").Index(patchNumber), tryJSONMarshal(patch), validationErr.Error())
+	}
 	return nil
+}
+
+func tryJSONMarshal(v any) string {
+	b, err := json.Marshal(v)
+	if err == nil {
+		return string(b)
+	}
+	return fmt.Sprintf("%+v", v)
 }
 
 // ValidateCombineFromCompositePathPatch validates Combine Patch types, by going through and validating the fromField
@@ -192,7 +224,7 @@ func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions
 	}
 	fromType, fromRequired, err := validateFieldPath(from, fromFieldPath)
 	if err != nil {
-		return err
+		return field.Invalid(field.NewPath("fromFieldPath"), fromFieldPath, err.Error())
 	}
 	toType, toRequired, err := validateFieldPath(to, toFieldPath)
 	if err != nil {
@@ -214,7 +246,7 @@ func validateTransforms(transforms []v1.Transform, fromType, toType string) (err
 	for _, transform := range transforms {
 		err = composition.ValidateTransform(transform, transformedToType)
 		if err != nil {
-			return err
+			return field.Invalid(field.NewPath("transforms"), transforms, err.Error())
 		}
 		transformedToType, err = composition.TransformOutputType(transform)
 		if err != nil {

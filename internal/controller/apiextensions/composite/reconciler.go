@@ -486,7 +486,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	// TODO(phisco): refactor it and replace it with a NopValidator as otherwise we run it twice in validation webhook
 	// TODO(negz): Composition compositionValidation should be handled by a compositionValidation
 	// webhook, not by this controller.
-	if err := r.composition.Validate(comp); err != nil {
+	if err := r.composition.ValidateError(comp); err != nil {
 		log.Debug(errValidate, "error", err)
 		err = errors.Wrap(err, errValidate)
 		r.record.Event(xr, event.Warning(reasonCompose, err))

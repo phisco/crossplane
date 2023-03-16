@@ -22,6 +22,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/crossplane/crossplane-runtime/pkg/errors"
+	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composed"
+)
+
+const (
+	// ErrFnMissingContainerConfig is the error returned when a function of type Container
+	// does not specify container configuration.
+	ErrFnMissingContainerConfig = "functions of type: Container must specify container configuration"
+
+	// ErrFmtUnknownFnType is the error returned when a function of an unknown type is
+	// specified.
+	ErrFmtUnknownFnType = "unknown function type %q"
 )
 
 // CompositionSpec specifies desired state of a composition.
@@ -153,6 +167,32 @@ type ComposedTemplate struct {
 	ReadinessChecks []ReadinessCheck `json:"readinessChecks,omitempty"`
 }
 
+// GetBaseObject returns the base object of the composed template.
+// Uses the cached object if it is available, or parses the raw Base
+// otherwise. The returned object is a deep copy.
+func (ct *ComposedTemplate) GetBaseObject() (client.Object, error) {
+	if err := ct.InitBaseObject(); err != nil {
+		return nil, err
+	}
+	if ct, ok := ct.Base.Object.(client.Object); ok {
+		return ct.DeepCopyObject().(client.Object), nil
+	}
+	return nil, errors.New("base object is not a client.Object")
+}
+
+// InitBaseObject parses the raw base and sets the base object.
+func (ct *ComposedTemplate) InitBaseObject() error {
+	if ct.Base.Object != nil {
+		return nil
+	}
+	cd, err := composed.ParseToUnstructured(ct.Base.Raw)
+	if err != nil {
+		return errors.Wrap(err, "cannot parse base")
+	}
+	ct.Base.Object = cd
+	return nil
+}
+
 // ReadinessCheckType is used for readiness check types.
 type ReadinessCheckType string
 
@@ -257,6 +297,17 @@ type Function struct {
 	// Container configuration of this function.
 	// +optional
 	Container *ContainerFunction `json:"container,omitempty"`
+}
+
+// Validate this Function.
+func (f *Function) Validate() error {
+	if f.Type == FunctionTypeContainer {
+		if f.Container == nil {
+			return errors.New(ErrFnMissingContainerConfig)
+		}
+		return nil
+	}
+	return errors.Errorf(ErrFmtUnknownFnType, f.Type)
 }
 
 // A FunctionType is a type of Composition Function.

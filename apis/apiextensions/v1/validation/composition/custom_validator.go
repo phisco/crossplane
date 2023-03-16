@@ -32,7 +32,6 @@ import (
 
 	xperrors "github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
-	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composed"
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 )
 
@@ -78,7 +77,7 @@ func (c *CustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object
 }
 
 // ValidateCreate validates the Composition by rendering it and then validating the rendered resources.
-func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) error { //nolint:gocyclo //TODO: refactor this function
+func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) error {
 	comp, ok := obj.(*v1.Composition)
 	if !ok {
 		return xperrors.New("not a v1 Composition")
@@ -92,7 +91,7 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 
 	// Get all the needed CRDs, Composite Resource, Managed resources ... ? Error out if missing in strict mode
 	gvkToCRDs, errs := c.getNeededCRDs(ctx, comp)
-	var looseModeSkip bool
+	var shouldSkip bool
 	for _, err := range errs {
 		if err == nil {
 			continue
@@ -106,19 +105,19 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 			return xperrors.Wrap(err, "cannot get needed CRDs and strict mode is enabled")
 		}
 		if validationMode == v1.CompositionValidationModeLoose {
-			looseModeSkip = true
+			shouldSkip = true
 		}
 	}
 
-	// Given that some requirement is missing, and we are in loose mode, skip the rest of the validation
-	if looseModeSkip && validationMode == v1.CompositionValidationModeLoose {
+	// Given that some requirement is missing, and we are in loose mode, skip validation
+	if shouldSkip {
 		// TODO: emit a warning here
 		return nil
 	}
 
 	// From here on we should refactor the code to allow using it from linters/Lsp
-	if err := ValidateComposition(ctx, comp, gvkToCRDs, validation.NewClientWithFallbackReader(&validation.MapClient{}, c.reader)); err != nil {
-		return apierrors.NewBadRequest(err.Error())
+	if errs := ValidateComposition(ctx, comp, gvkToCRDs, validation.NewClientWithFallbackReader(&validation.MapClient{}, c.reader)); len(errs) != 0 {
+		return apierrors.NewInvalid(comp.GroupVersionKind().GroupKind(), comp.GetName(), errs)
 	}
 	return nil
 }
@@ -142,10 +141,10 @@ func (c *CustomValidator) getNeededCRDs(ctx context.Context, comp *v1.Compositio
 	}
 
 	// Get schema for all Managed Resource Definitions defined by comp.Spec.Resources
-	for i, res := range comp.Spec.Resources {
-		cd, err := composed.ParseToUnstructured(res.Base.Raw)
+	for _, res := range comp.Spec.Resources {
+		cd, err := res.GetBaseObject()
 		if err != nil {
-			resultErrs = append(resultErrs, fmt.Errorf("failed to parse composed resource %v (%d): %w", res.Name, i, err))
+			return nil, []error{err}
 		}
 		gvk := cd.GetObjectKind().GroupVersionKind()
 		if _, ok := neededCrds[gvk]; ok {

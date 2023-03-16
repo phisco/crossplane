@@ -83,8 +83,10 @@ func TestRejectMixedTemplates(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			got := RejectMixedTemplates(tc.comp)
-			if diff := cmp.Diff(tc.want, got, test.EquateErrors()); diff != "" {
-				t.Errorf("\nRejectMixedTemplates(...): -want, +got:\n%s", diff)
+			for _, e := range got {
+				if diff := cmp.Diff(tc.want, errors.New(e.Detail), test.EquateErrors()); diff != "" {
+					t.Errorf("\nRejectFunctionsWithoutRequiredConfig(...): -want, +got:\n%s", diff)
+				}
 			}
 		})
 	}
@@ -145,8 +147,10 @@ func TestRejectDuplicateNames(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			got := RejectDuplicateNames(tc.comp)
-			if diff := cmp.Diff(tc.want, got, test.EquateErrors()); diff != "" {
-				t.Errorf("\nRejectDuplicateNames(...): -want, +got:\n%s", diff)
+			for _, e := range got {
+				if diff := cmp.Diff(tc.want, errors.New(e.Detail), test.EquateErrors()); diff != "" {
+					t.Errorf("\nRejectDuplicateNames(...): -want, +got:\n%s", diff)
+				}
 			}
 		})
 	}
@@ -214,8 +218,10 @@ func TestRejectAnonymousTemplatesWithFunctions(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			got := RejectAnonymousTemplatesWithFunctions(tc.comp)
-			if diff := cmp.Diff(tc.want, got, test.EquateErrors()); diff != "" {
-				t.Errorf("\nRejectAnonymousTemplatesWithFunctions(...): -want, +got:\n%s", diff)
+			for _, e := range got {
+				if diff := cmp.Diff(tc.want, errors.New(e.Detail), test.EquateErrors()); diff != "" {
+					t.Errorf("\nRejectAnonymousTemplatesWithFunctions(...): -want, +got:\n%s", diff)
+				}
 			}
 		})
 	}
@@ -234,7 +240,7 @@ func TestRejectFunctionsWithoutRequiredConfig(t *testing.T) {
 					}},
 				},
 			},
-			want: errors.Errorf(errFmtUnknownFnType, "wat"),
+			want: errors.Errorf(v1.ErrFmtUnknownFnType, "wat"),
 		},
 		"MissingContainerConfig": {
 			comp: &v1.Composition{
@@ -244,7 +250,7 @@ func TestRejectFunctionsWithoutRequiredConfig(t *testing.T) {
 					}},
 				},
 			},
-			want: errors.New(errFnMissingContainerConfig),
+			want: errors.New(v1.ErrFnMissingContainerConfig),
 		},
 		"HasContainerConfig": {
 			comp: &v1.Composition{
@@ -264,8 +270,10 @@ func TestRejectFunctionsWithoutRequiredConfig(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			got := RejectFunctionsWithoutRequiredConfig(tc.comp)
-			if diff := cmp.Diff(tc.want, got, test.EquateErrors()); diff != "" {
-				t.Errorf("\nRejectFunctionsWithoutRequiredConfig(...): -want, +got:\n%s", diff)
+			for _, e := range got {
+				if diff := cmp.Diff(tc.want, errors.New(e.Detail), test.EquateErrors()); diff != "" {
+					t.Errorf("\nRejectFunctionsWithoutRequiredConfig(...): -want, +got:\n%s", diff)
+				}
 			}
 		})
 	}
