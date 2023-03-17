@@ -34,12 +34,12 @@ func ValidateConnectionDetails(comp *v1.Composition, gvkToCRD map[schema.GroupVe
 	for i, resource := range comp.Spec.Resources {
 		gvk, err := resource.GetObjectGVK()
 		if err != nil {
-			return append(errs, field.InternalError(field.NewPath("spec", "resource").Index(i).Child("base"), errors.Wrap(err, "cannot get object gvk")))
+			return append(errs, field.InternalError(field.NewPath("spec", "resource").Index(i), errors.Wrap(err, "cannot get object gvk")))
 		}
 		crd, ok := gvkToCRD[gvk]
 		if !ok {
 			return append(errs, field.InternalError(
-				field.NewPath("spec", "resource").Index(i).Child("base"),
+				field.NewPath("spec", "resource").Index(i),
 				fmt.Errorf("crd for gvk %q not found", gvk),
 			))
 		}
@@ -49,7 +49,7 @@ func ValidateConnectionDetails(comp *v1.Composition, gvkToCRD map[schema.GroupVe
 			}
 			_, _, err = validateFieldPath(crd.Spec.Validation.OpenAPIV3Schema, *con.FromFieldPath)
 			if err != nil {
-				errs = append(errs, field.Invalid(field.NewPath("spec", "resource").Index(i).Child("base").Child("connectionDetails").Index(j).Child("fromFieldPath"), *con.FromFieldPath, err.Error()))
+				errs = append(errs, field.Invalid(field.NewPath("spec", "resource").Index(i).Child("connectionDetails").Index(j).Child("fromFieldPath"), *con.FromFieldPath, err.Error()))
 			}
 		}
 	}

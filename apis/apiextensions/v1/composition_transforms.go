@@ -19,6 +19,7 @@ package v1
 import (
 	"encoding/json"
 
+	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
@@ -63,6 +64,34 @@ type Transform struct {
 	// Convert is used to cast the input into the given output type.
 	// +optional
 	Convert *ConvertTransform `json:"convert,omitempty"`
+}
+
+// Validate this Transform is valid.
+func (t *Transform) Validate() error {
+	switch t.Type {
+	case TransformTypeMath:
+		if t.Math == nil {
+			return errors.Errorf("given transform type %s requires configuration", t.Type)
+		}
+	case TransformTypeMap:
+		if t.Map == nil {
+			return errors.Errorf("given transform type %s requires configuration", t.Type)
+		}
+	case TransformTypeMatch:
+		if t.Match == nil {
+			return errors.Errorf("given transform type %s requires configuration", t.Type)
+		}
+	case TransformTypeString:
+		if t.String == nil {
+			return errors.Errorf("given transform type %s requires configuration", t.Type)
+		}
+	case TransformTypeConvert:
+		if t.Convert == nil {
+			return errors.Errorf("given transform type %s requires configuration", t.Type)
+		}
+	}
+
+	return nil
 }
 
 // MathTransform conducts mathematical operations on the input with the given

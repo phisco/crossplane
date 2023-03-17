@@ -28,8 +28,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/crossplane/crossplane-runtime/pkg/validation"
-
 	xperrors "github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
 
@@ -118,7 +116,7 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 
 	// From here on we should refactor the code to allow using it from linters/Lsp
 	// TODO (lsviben) figure out how to emit warnings instead of errors in case of WARN state (strict, but just warnings)
-	if errs := ValidateComposition(ctx, comp, gvkToCRDs, validation.NewClientWithFallbackReader(&validation.MapClient{}, c.reader)); len(errs) != 0 {
+	if errs := ValidateComposition(ctx, comp, gvkToCRDs, c.reader); len(errs) != 0 {
 		return apierrors.NewInvalid(comp.GroupVersionKind().GroupKind(), comp.GetName(), errs)
 	}
 	return nil

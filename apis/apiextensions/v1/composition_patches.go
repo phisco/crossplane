@@ -118,6 +118,7 @@ func (p *Patch) Validate() error {
 			return errors.New("combine must be set for patch type " + string(p.Type))
 		}
 	}
+
 	return nil
 }
 

@@ -24,10 +24,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composed"
+
+	"github.com/crossplane/crossplane/internal/controller/apiextensions/composition/validation"
 )
 
 const (
@@ -483,4 +486,48 @@ type CompositionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Composition `json:"items"`
+}
+
+// Validate performs logical validation of a Composition.
+func (c *Composition) Validate() (errs field.ErrorList) {
+	// Perform logical checks
+	if err := validation.GetLogicalChecks().Validate(c); err != nil {
+		errs = append(errs, err...)
+	}
+
+	for i, s := range c.Spec.PatchSets {
+		for j, p := range s.Patches {
+			if p.Type == PatchTypePatchSet {
+				errs = append(errs, field.Invalid(field.NewPath("spec", "patchSets").Index(i).Child("patches").Index(j), p, errors.New("cannot use patches within patches").Error()))
+			}
+			if err := p.Validate(); err != nil {
+				errs = append(errs, field.Invalid(field.NewPath("spec", "patchSets").Index(i).Child("patches").Index(j), p, err.Error()))
+			}
+			for k, t := range p.Transforms {
+				if err := t.Validate(); err != nil {
+					errs = append(errs, field.Invalid(field.NewPath("spec", "resource").Index(i).Child("patches").Index(j).Child("transforms").Index(k), t, err.Error()))
+				}
+			}
+		}
+	}
+
+	for i, res := range c.Spec.Resources {
+		for j, patch := range res.Patches {
+			if err := patch.Validate(); err != nil {
+				errs = append(errs, field.Invalid(field.NewPath("spec", "resource").Index(i).Child("patches").Index(j), patch, err.Error()))
+			}
+
+			for k, t := range patch.Transforms {
+				if err := t.Validate(); err != nil {
+					errs = append(errs, field.Invalid(field.NewPath("spec", "resource").Index(i).Child("patches").Index(j).Child("transforms").Index(k), t, err.Error()))
+				}
+			}
+		}
+		for j, rd := range res.ReadinessChecks {
+			if err := rd.Validate(); err != nil {
+				errs = append(errs, field.Invalid(field.NewPath("spec", "resource").Index(i).Child("patches").Index(j), rd, err.Error()))
+			}
+		}
+	}
+	return errs
 }

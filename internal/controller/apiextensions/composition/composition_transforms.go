@@ -36,6 +36,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
+	"github.com/crossplane/crossplane/apis/apiextensions/v1/validation/composition"
 )
 
 const (
@@ -119,73 +120,57 @@ func Resolve(t v1.Transform, input any) (any, error) { //nolint:gocyclo // This 
 	return out, errors.Wrapf(err, errFmtTransformTypeFailed, string(t.Type))
 }
 
-// TransformOutputType returns the output type of the supplied Transform.
-func TransformOutputType(t v1.Transform) (string, error) {
+// transformOutputType returns the output type of the supplied Transform.
+func transformOutputType(t v1.Transform) (string, error) {
 	switch t.Type {
 	case v1.TransformTypeMath:
-		return "number", nil
+		return string(composition.NumberKnownJSONType), nil
 	case v1.TransformTypeMap:
 		return TransformOutputTypeAny, nil
 	case v1.TransformTypeMatch:
 		return TransformOutputTypeAny, nil
 	case v1.TransformTypeString:
-		return "string", nil
+		return string(composition.StringKnownJSONType), nil
 	case v1.TransformTypeConvert:
 		switch t.Convert.ToType {
 		case "int64", "int":
-			return "integer", nil
+			return string(composition.IntegerKnownJSONType), nil
 		case "float", "float64":
-			return "number", nil
+			return string(composition.NumberKnownJSONType), nil
 		}
 		return t.Convert.ToType, nil
 	}
 	return "", errors.Errorf(errFmtTypeNotSupported, string(t.Type))
 }
 
-// ValidateTransform validates the supplied Transform, taking into consideration also the input type.
+// ValidateTransformIOTypes validates the supplied Transform type, taking into consideration also the input type.
 //
 //nolint:gocyclo // This is a long but simple/same-y switch.
-func ValidateTransform(t v1.Transform, fromType string) error {
+func ValidateTransformIOTypes(t v1.Transform, fromType string) (string, error) {
 	switch t.Type {
 	case v1.TransformTypeMath:
-		if t.Math == nil {
-			return errors.Errorf(errFmtTransformConfigMissing, t.Type)
-		}
-		if fromType != TransformOutputTypeAny && fromType != "number" && fromType != "integer" {
-			return errors.New(errMathInputNonNumber)
+		if fromType != TransformOutputTypeAny && fromType != string(composition.NumberKnownJSONType) && fromType != string(composition.IntegerKnownJSONType) {
+			return "", errors.New(errMathInputNonNumber)
 		}
 	case v1.TransformTypeMap:
-		if t.Map == nil {
-			return errors.Errorf(errFmtTransformConfigMissing, t.Type)
-		}
-		if fromType != TransformOutputTypeAny && fromType != "string" {
-			return errors.Errorf(errFmtMapTypeNotSupported, fromType)
+		if fromType != TransformOutputTypeAny && fromType != string(composition.StringKnownJSONType) {
+			return "", errors.Errorf(errFmtMapTypeNotSupported, fromType)
 		}
 	case v1.TransformTypeMatch:
-		if t.Match == nil {
-			return errors.Errorf(errFmtTransformConfigMissing, t.Type)
-		}
-		if fromType != TransformOutputTypeAny && fromType != "string" {
-			return errors.Errorf(errFmtMatchInputTypeInvalid, fromType)
+		if fromType != TransformOutputTypeAny && fromType != string(composition.StringKnownJSONType) {
+			return "", errors.Errorf(errFmtMatchInputTypeInvalid, fromType)
 		}
 	case v1.TransformTypeString:
-		if t.String == nil {
-			return errors.Errorf(errFmtTransformConfigMissing, t.Type)
-		}
-		if fromType != TransformOutputTypeAny && fromType != "string" {
-			return errors.Errorf(errFmtMatchInputTypeInvalid, fromType)
+		if fromType != TransformOutputTypeAny && fromType != string(composition.StringKnownJSONType) {
+			return "", errors.Errorf(errFmtMatchInputTypeInvalid, fromType)
 		}
 	case v1.TransformTypeConvert:
-		if t.Convert == nil {
-			return errors.Errorf(errFmtTransformConfigMissing, fromType)
-		}
-
 		// TransformOutputTypeAny is non-deterministic so we skip
 		if fromType == TransformOutputTypeAny {
-			return nil
+			return "", nil
 		}
 
-		if fromType == "integer" || fromType == "number" {
+		if fromType == string(composition.IntegerKnownJSONType) || fromType == string(composition.NumberKnownJSONType) {
 			fromType = "float64"
 		}
 
@@ -195,15 +180,16 @@ func ValidateTransform(t v1.Transform, fromType string) error {
 		}
 
 		if fromType == t.Convert.ToType {
-			return nil
+			return "", nil
 		}
 
 		_, ok := conversions[conversionPair{From: fromType, To: t.Convert.ToType, Format: format}]
 		if !ok {
-			return errors.Errorf(errConvertFormatPairNotSupported, fromType, t.Convert.ToType, format)
+			return "", errors.Errorf(errConvertFormatPairNotSupported, fromType, t.Convert.ToType, format)
 		}
 	}
-	return nil
+
+	return transformOutputType(t)
 }
 
 // ResolveMath resolves a Math transform.

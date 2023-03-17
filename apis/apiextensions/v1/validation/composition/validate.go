@@ -27,7 +27,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apivalidation "k8s.io/apiextensions-apiserver/pkg/apiserver/validation"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,8 +40,12 @@ import (
 
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 	"github.com/crossplane/crossplane/internal/controller/apiextensions/composite"
-	"github.com/crossplane/crossplane/internal/controller/apiextensions/composition/validation"
 	"github.com/crossplane/crossplane/internal/xcrd"
+)
+
+const (
+	compositeResourceValidationName      = "validationName"
+	compositeResourceValidationNamespace = "validationNamespace"
 )
 
 // ValidateComposition validates the Composition by rendering it and then validating the rendered resources using the
@@ -53,16 +56,11 @@ func ValidateComposition(
 	ctx context.Context,
 	comp *v1.Composition,
 	gvkToCRDs map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition,
-	c client.Client,
+	reader client.Reader,
 ) (errs field.ErrorList) {
-	// Perform logical checks
-	if err := validation.GetLogicalChecks().Validate(comp); err != nil {
-		errs = append(errs, err...)
-		return errs
-	}
 
 	// Validate patches given the above CRDs, skip if any of the required CRDs is not available
-	if patchErrs := ValidatePatches(comp, gvkToCRDs); len(patchErrs) > 0 {
+	if patchErrs := ValidatePatchesWithSchemas(comp, gvkToCRDs); len(patchErrs) > 0 {
 		errs = append(errs, patchErrs...)
 		return errs
 	}
@@ -78,50 +76,40 @@ func ValidateComposition(
 	}
 
 	// Return if using unsupported/non-deterministic features, e.g. Transforms...
-	if err := comp.IsUsingNonDeterministicTransforms(); err != nil {
+	if err := comp.IsUsingFunctions(); err != nil {
+		// TODO(lsviben) we should send out a warning that we are not rendering and validating the whole Composition
 		return nil
 	}
 
-	// Mock any required input given their CRDs => crossplane-runtime
-	// TODO(lsviben) refactor
-	compositeResGVK := schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
-		comp.Spec.CompositeTypeRef.Kind)
+	// Mock any required input given their CRDs
+	compositeRes, compositeResGVK := genCompositeResource(comp)
 	compositeResCRD, ok := gvkToCRDs[compositeResGVK]
 	if !ok {
-		errs = append(errs, field.Invalid(
+		return append(errs, field.Invalid(
 			field.NewPath("spec", "compositeTypeRef"),
 			comp.Spec.CompositeTypeRef,
 			fmt.Sprintf("cannot find CRD for composite resource %s", compositeResGVK),
 		))
-		return errs
 	}
-	compositeRes := xprcomposite.New(xprcomposite.WithGroupVersionKind(compositeResGVK))
-	compositeRes.SetName("fake")
-	compositeRes.SetNamespace("test")
-	compositeRes.SetCompositionReference(&corev1.ObjectReference{Name: comp.GetName()})
 	if err := xprvalidation.MockRequiredFields(compositeRes, compositeResCRD.Spec.Validation.OpenAPIV3Schema); err != nil {
 		errs = append(errs, field.InternalError(field.NewPath("spec", "compositeTypeRef"), err))
 		return errs
 	}
-
-	// create or update all required resources
+	c := &xprvalidation.MapClient{}
+	// create all required resources
 	for _, obj := range []client.Object{compositeRes, comp} {
 		err := c.Create(ctx, obj)
-		if apierrors.IsAlreadyExists(err) {
-			if err := c.Update(ctx, obj); err != nil {
-				errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot update required resources")))
-				return errs
-			}
-		} else if err != nil {
-			errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot create required resources")))
+		if err != nil {
+			errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot create required mock resources")))
 			return errs
 		}
 	}
 
 	// Render resources => reuse existing logic
-	r := composite.NewReconcilerFromClient(c, resource.CompositeKind(schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
+	clientWithFallbackReader := xprvalidation.NewClientWithFallbackReader(c, reader)
+	r := composite.NewReconcilerFromClient(clientWithFallbackReader, resource.CompositeKind(schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
 		comp.Spec.CompositeTypeRef.Kind)))
-	if _, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "fake", Namespace: "test"}}); err != nil {
+	if _, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: compositeResourceValidationName, Namespace: compositeResourceValidationNamespace}}); err != nil {
 		errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot render resources")))
 		return errs
 	}
@@ -135,7 +123,7 @@ func ValidateComposition(
 		}
 		composedRes := &unstructured.UnstructuredList{}
 		composedRes.SetGroupVersionKind(gvk)
-		err := c.List(ctx, composedRes, client.MatchingLabels{xcrd.LabelKeyNamePrefixForComposed: "fake"})
+		err := c.List(ctx, composedRes, client.MatchingLabels{xcrd.LabelKeyNamePrefixForComposed: compositeResourceValidationName})
 		if err != nil {
 			errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot list composed resources")))
 			return errs
@@ -181,6 +169,16 @@ func ValidateComposition(
 	}
 
 	return nil
+}
+
+func genCompositeResource(comp *v1.Composition) (*xprcomposite.Unstructured, schema.GroupVersionKind) {
+	compositeResGVK := schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
+		comp.Spec.CompositeTypeRef.Kind)
+	compositeRes := xprcomposite.New(xprcomposite.WithGroupVersionKind(compositeResGVK))
+	compositeRes.SetName(compositeResourceValidationName)
+	compositeRes.SetNamespace(compositeResourceValidationNamespace)
+	compositeRes.SetCompositionReference(&corev1.ObjectReference{Name: comp.GetName()})
+	return compositeRes, compositeResGVK
 }
 
 func findSourceResourceIndex(resources []v1.ComposedTemplate, composed unstructured.Unstructured) int {

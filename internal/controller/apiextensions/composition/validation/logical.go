@@ -19,7 +19,6 @@ package validation
 import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
-	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/validation"
 
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
@@ -30,7 +29,6 @@ const (
 	errMixed           = "cannot mix named and anonymous resource templates - ensure all resource templates are named"
 	errDuplicate       = "resource template names must be unique within their Composition"
 	errFnsRequireNames = "cannot use functions with anonymous resource templates - ensure all resource templates are named"
-	errNestedPatches   = "cannot use patches within patches"
 )
 
 var (
@@ -39,7 +37,6 @@ var (
 		validation.ValidatorFn[v1.Composition](RejectDuplicateNames),
 		validation.ValidatorFn[v1.Composition](RejectAnonymousTemplatesWithFunctions),
 		validation.ValidatorFn[v1.Composition](RejectFunctionsWithoutRequiredConfig),
-		validation.ValidatorFn[v1.Composition](RejectInvalidPatchSets),
 	}
 )
 
@@ -122,22 +119,6 @@ func RejectFunctionsWithoutRequiredConfig(comp *v1.Composition) (errs field.Erro
 	for i, fn := range comp.Spec.Functions {
 		if err := fn.Validate(); err != nil {
 			errs = append(errs, field.Invalid(field.NewPath("spec", "functions").Index(i), fn, err.Error()))
-		}
-	}
-	return errs
-}
-
-// RejectInvalidPatchSets validates that the supplied Composition does not attempt
-// to nest patch sets and that patch set names are unique within the Composition.
-func RejectInvalidPatchSets(comp *v1.Composition) (errs field.ErrorList) {
-	for i, s := range comp.Spec.PatchSets {
-		for j, p := range s.Patches {
-			if p.Type == v1.PatchTypePatchSet {
-				errs = append(errs, field.Invalid(field.NewPath("spec", "patchSets").Index(i).Child("patches").Index(j), p, errors.New(errNestedPatches).Error()))
-			}
-			if err := p.Validate(); err != nil {
-				errs = append(errs, field.Invalid(field.NewPath("spec", "patchSets").Index(i).Child("patches").Index(j), p, err.Error()))
-			}
 		}
 	}
 	return errs
