@@ -14,14 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package validation
+package v1
 
 import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	"github.com/crossplane/crossplane-runtime/pkg/validation"
-
-	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 )
 
 // Error strings
@@ -32,18 +30,13 @@ const (
 )
 
 var (
-	defaultValidationChain = validation.Chain[v1.Composition]{
-		validation.ValidatorFn[v1.Composition](RejectMixedTemplates),
-		validation.ValidatorFn[v1.Composition](RejectDuplicateNames),
-		validation.ValidatorFn[v1.Composition](RejectAnonymousTemplatesWithFunctions),
-		validation.ValidatorFn[v1.Composition](RejectFunctionsWithoutRequiredConfig),
+	defaultValidationChain = validation.Chain[Composition]{
+		validation.ValidatorFn[Composition](RejectMixedTemplates),
+		validation.ValidatorFn[Composition](RejectDuplicateNames),
+		validation.ValidatorFn[Composition](RejectAnonymousTemplatesWithFunctions),
+		validation.ValidatorFn[Composition](RejectFunctionsWithoutRequiredConfig),
 	}
 )
-
-// GetLogicalChecks returns the default validation chain for Compositions.
-func GetLogicalChecks() validation.Chain[v1.Composition] {
-	return defaultValidationChain[:]
-}
 
 // RejectMixedTemplates validates that the supplied Composition does not attempt
 // to mix named and anonymous templates. If some but not all templates are named
@@ -54,7 +47,7 @@ func GetLogicalChecks() validation.Chain[v1.Composition] {
 // beginning or middle of the resources array using the anonymous composer would
 // be destructive, because it assumes template N always corresponds to existing
 // template N.
-func RejectMixedTemplates(comp *v1.Composition) field.ErrorList {
+func RejectMixedTemplates(comp *Composition) field.ErrorList {
 	named := 0
 	for _, tmpl := range comp.Spec.Resources {
 		if tmpl.Name != nil {
@@ -74,7 +67,7 @@ func RejectMixedTemplates(comp *v1.Composition) field.ErrorList {
 
 // RejectDuplicateNames validates that all template names are unique within the
 // supplied Composition.
-func RejectDuplicateNames(comp *v1.Composition) (errs field.ErrorList) {
+func RejectDuplicateNames(comp *Composition) (errs field.ErrorList) {
 	seen := map[string]bool{}
 	for i, tmpl := range comp.Spec.Resources {
 		if tmpl.Name == nil {
@@ -93,7 +86,7 @@ func RejectDuplicateNames(comp *v1.Composition) (errs field.ErrorList) {
 // when Composition Functions are in use. This is necessary for the
 // FunctionComposer to be able to associate entries in the spec.resources array
 // with entries in a FunctionIO's observed and desired arrays.
-func RejectAnonymousTemplatesWithFunctions(comp *v1.Composition) (errs field.ErrorList) {
+func RejectAnonymousTemplatesWithFunctions(comp *Composition) (errs field.ErrorList) {
 	if len(comp.Spec.Functions) == 0 {
 		// Composition Functions do not appear to be in use.
 		return nil
@@ -115,7 +108,7 @@ func RejectAnonymousTemplatesWithFunctions(comp *v1.Composition) (errs field.Err
 // RejectFunctionsWithoutRequiredConfig rejects Composition Functions missing
 // the configuration for their type - for example a function of type: Container
 // must include a container configuration.
-func RejectFunctionsWithoutRequiredConfig(comp *v1.Composition) (errs field.ErrorList) {
+func RejectFunctionsWithoutRequiredConfig(comp *Composition) (errs field.ErrorList) {
 	for i, fn := range comp.Spec.Functions {
 		if err := fn.Validate(); err != nil {
 			errs = append(errs, field.Invalid(field.NewPath("spec", "functions").Index(i), fn, err.Error()))

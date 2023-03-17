@@ -27,61 +27,14 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
+	schema2 "github.com/crossplane/crossplane/pkg/validation/schema"
 
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 	"github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 )
 
-type KnownJSONTypes string
-
-const (
-	ArrayKnownJSONType   KnownJSONTypes = "array"
-	BooleanKnownJSONType KnownJSONTypes = "boolean"
-	IntegerKnownJSONType KnownJSONTypes = "integer"
-	NullKnownJSONType    KnownJSONTypes = "null"
-	NumberKnownJSONType  KnownJSONTypes = "number"
-	ObjectKnownJSONType  KnownJSONTypes = "object"
-	StringKnownJSONType  KnownJSONTypes = "string"
-)
-
-var (
-	metadataSchema = apiextensions.JSONSchemaProps{
-		Type: string(ObjectKnownJSONType),
-		AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
-			Allows: true,
-		},
-		Properties: map[string]apiextensions.JSONSchemaProps{
-			"name": {
-				Type: string(StringKnownJSONType),
-			},
-			"namespace": {
-				Type: string(StringKnownJSONType),
-			},
-			"labels": {
-				Type: string(ObjectKnownJSONType),
-				AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
-					Schema: &apiextensions.JSONSchemaProps{
-						Type: string(StringKnownJSONType),
-					},
-				},
-			},
-			"annotations": {
-				Type: string(ObjectKnownJSONType),
-				AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
-					Schema: &apiextensions.JSONSchemaProps{
-						Type: string(StringKnownJSONType),
-					},
-				},
-			},
-			"uid": {
-				Type: string(StringKnownJSONType),
-			},
-		},
-	}
-)
-
-// ValidatePatchesWithSchemas validates the patches of a composition against the resources schemas.
-func ValidatePatchesWithSchemas(comp *v1.Composition, gvkToCRD map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition) (errs field.ErrorList) {
+// validatePatchesWithSchemas validates the patches of a composition against the resources schemas.
+func validatePatchesWithSchemas(comp *v1.Composition, gvkToCRD map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition) (errs field.ErrorList) {
 	// Let's first dereference patchSets
 	resources, err := composition.ComposedTemplates(comp.Spec)
 	if err != nil {
@@ -90,7 +43,7 @@ func ValidatePatchesWithSchemas(comp *v1.Composition, gvkToCRD map[schema.GroupV
 	}
 	for i, resource := range resources {
 		for j := range resource.Patches {
-			if err := ValidatePatchWithSchemas(comp, i, j, gvkToCRD); err != nil {
+			if err := validatePatchWithSchemas(comp, i, j, gvkToCRD); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -98,8 +51,8 @@ func ValidatePatchesWithSchemas(comp *v1.Composition, gvkToCRD map[schema.GroupV
 	return errs
 }
 
-// ValidatePatchWithSchemas validates a patch against the resources schemas.
-func ValidatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): refactor
+// validatePatchWithSchemas validates a patch against the resources schemas.
+func validatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): refactor
 	comp *v1.Composition,
 	resourceNumber, patchNumber int,
 	gvkToCRD map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition,
@@ -131,36 +84,51 @@ func ValidatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): refactor
 		return field.InternalError(field.NewPath("spec"), errors.Errorf("cannot find resource type %s", res.GetObjectKind().GroupVersionKind()))
 	}
 
-	var validationErr error
+	var validationErr *field.Error
+	var fromType, toType string
 	switch patch.GetType() { //nolint:exhaustive // TODO implement other patch types
-	// TODO return fromType toType and validate transforms in one place
 	case v1.PatchTypeFromCompositeFieldPath:
-		validationErr = ValidateFromCompositeFieldPathPatch(
+		fromType, toType, validationErr = ValidateFromCompositeFieldPathPatch(
 			patch,
 			compositeCRD.Spec.Validation.OpenAPIV3Schema,
 			resourceCRD.Spec.Validation.OpenAPIV3Schema,
 		)
 	case v1.PatchTypeToCompositeFieldPath:
-		validationErr = ValidateFromCompositeFieldPathPatch(
+		fromType, toType, validationErr = ValidateFromCompositeFieldPathPatch(
 			patch,
 			resourceCRD.Spec.Validation.OpenAPIV3Schema,
 			compositeCRD.Spec.Validation.OpenAPIV3Schema,
 		)
 	case v1.PatchTypeCombineFromComposite:
-		validationErr = ValidateCombineFromCompositePathPatch(
+		fromType, toType, validationErr = ValidateCombineFromCompositePathPatch(
 			patch,
 			compositeCRD.Spec.Validation.OpenAPIV3Schema,
 			resourceCRD.Spec.Validation.OpenAPIV3Schema)
 	case v1.PatchTypeCombineToComposite:
-		validationErr = ValidateCombineFromCompositePathPatch(
+		fromType, toType, validationErr = ValidateCombineFromCompositePathPatch(
 			patch,
 			resourceCRD.Spec.Validation.OpenAPIV3Schema,
 			compositeCRD.Spec.Validation.OpenAPIV3Schema)
 	}
 	if validationErr != nil {
-		return field.Invalid(field.NewPath("spec", "resource").Index(resourceNumber).Child("patches").Index(patchNumber), tryJSONMarshal(patch), validationErr.Error())
+		return field.Invalid(field.NewPath(validationErr.Field, "spec", "resource").Index(resourceNumber).Child("patches").Index(patchNumber), tryJSONMarshal(patch), validationErr.Error())
 	}
-	return nil
+
+	return AddPath(
+		field.NewPath("spec", "resource").Index(resourceNumber).Child("patches").Index(patchNumber),
+		validateTransformsIOTypes(patch.Transforms, fromType, toType),
+	)
+}
+
+// AddPath wraps an error in a field.Error if it is not nil, adding the given field path to the error as a prefix.
+func AddPath(f *field.Path, err *field.Error) *field.Error {
+	if err == nil {
+		return nil
+	}
+	if f != nil {
+		err.Field = f.Child(err.Field).String()
+	}
+	return err
 }
 
 func tryJSONMarshal(v any) string {
@@ -174,65 +142,56 @@ func tryJSONMarshal(v any) string {
 // ValidateCombineFromCompositePathPatch validates Combine Patch types, by going through and validating the fromField
 // path variables, checking if they all need to be required, checking if the right combine strategy is set and
 // validating transforms.
-//
-//nolint:gocyclo // TODO refactor it a bit, its just over the limit
 func ValidateCombineFromCompositePathPatch(
 	patch v1.Patch,
 	from *apiextensions.JSONSchemaProps,
 	to *apiextensions.JSONSchemaProps,
-) error {
+) (fromType, toType string, err *field.Error) {
 	fromRequired := true
 	for _, variable := range patch.Combine.Variables {
 		fromFieldPath := variable.FromFieldPath
 		_, required, err := validateFieldPath(from, fromFieldPath)
 		if err != nil {
-			return err
+			return "", "", field.Invalid(field.NewPath("fromFieldPath"), fromFieldPath, err.Error())
 		}
 		fromRequired = fromRequired && required
 	}
 
 	if patch.ToFieldPath == nil {
-		return errors.Errorf("%s is required by type %s", "ToFieldPath", patch.Type)
+		return "", "", field.Required(field.NewPath("toFieldPath"), "ToFieldPath is required by type Combine")
 	}
 
 	toFieldPath := safeDeref(patch.ToFieldPath)
-	toType, toRequired, err := validateFieldPath(to, toFieldPath)
-	if err != nil {
-		return err
+	toType, toRequired, toFieldPathErr := validateFieldPath(to, toFieldPath)
+	if toFieldPathErr != nil {
+		return "", "", field.Invalid(field.NewPath("toFieldPath"), toFieldPath, toFieldPathErr.Error())
 	}
 
 	if toRequired && !fromRequired {
-		return errors.Errorf("from field paths (%v) are not required but to field path is (%s)",
-			patch.Combine.Variables, toFieldPath)
+		return "", "", field.Invalid(
+			field.NewPath("combine"),
+			patch.Combine.Variables,
+			fmt.Sprintf("from field paths (%v) are not required but to field path is (%s)", patch.Combine.Variables, toFieldPath),
+		)
 	}
 
-	var fromType string
 	switch patch.Combine.Strategy {
 	case v1.CombineStrategyString:
 		if patch.Combine.String == nil {
-			return errors.Errorf("given combine strategy %s requires configuration", patch.Combine.Strategy)
+			return "", "", field.Required(field.NewPath("combine", "string"), "string combine strategy requires configuration")
 		}
-		fromType = string(StringKnownJSONType)
+		fromType = string(schema2.StringKnownJSONType)
 	default:
-		return errors.Errorf("combine strategy %s is not supported", patch.Combine.Strategy)
+		return "", "", field.Invalid(field.NewPath("combine", "strategy"), patch.Combine.Strategy, "combine strategy is not supported")
 	}
 
 	// TODO(lsviben) check if we could validate the patch combine format
 
-	if err := validateTransformsIOTypes(patch.Transforms, fromType, toType); err != nil {
-		return errors.Wrapf(
-			err,
-			"cannot validate transforms for patch from field paths (%v) to field path (%s)",
-			patch.Combine.Variables,
-			toFieldPath,
-		)
-	}
-
-	return nil
+	return fromType, toType, nil
 }
 
 // ValidateFromCompositeFieldPathPatch validates a patch of type FromCompositeFieldPath.
-func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions.JSONSchemaProps) error {
+func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions.JSONSchemaProps) (fromType, toType string, res *field.Error) {
 	fromFieldPath := safeDeref(patch.FromFieldPath)
 	toFieldPath := safeDeref(patch.ToFieldPath)
 	if toFieldPath == "" {
@@ -240,44 +199,44 @@ func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions
 	}
 	fromType, fromRequired, err := validateFieldPath(from, fromFieldPath)
 	if err != nil {
-		return field.Invalid(field.NewPath("fromFieldPath"), fromFieldPath, err.Error())
+		return "", "", field.Invalid(field.NewPath("fromFieldPath"), fromFieldPath, err.Error())
 	}
 	toType, toRequired, err := validateFieldPath(to, toFieldPath)
 	if err != nil {
-		return err
+		return "", "", field.Invalid(field.NewPath("toFieldPath"), toFieldPath, err.Error())
 	}
 	if toRequired && !fromRequired {
-		return errors.Errorf("from field path (%s) is not required but to field path is (%s)", fromFieldPath, toFieldPath)
+		return "", "", field.Invalid(field.NewPath("fromFieldPath"), fromFieldPath, fmt.Sprintf(
+			"from field path is not required but to field path is (%s)",
+			toFieldPath,
+		))
 	}
 
-	if err := validateTransformsIOTypes(patch.Transforms, fromType, toType); err != nil {
-		return errors.Wrapf(err, "cannot validate transforms for patch from field path (%s) to field path (%s)", fromFieldPath, toFieldPath)
-	}
-
-	return nil
+	return fromType, toType, nil
 }
 
-func validateTransformsIOTypes(transforms []v1.Transform, fromType, toType string) (err error) {
+func validateTransformsIOTypes(transforms []v1.Transform, fromType, toType string) *field.Error {
+	var err error
 	transformedToType := fromType
-	for _, transform := range transforms {
-		transformedToType, err = composition.ValidateTransformIOTypes(transform, transformedToType)
+	for i, transform := range transforms {
+		transformedToType, err = transform.ValidateIO(transformedToType)
 		if err != nil {
-			return field.Invalid(field.NewPath("transforms"), transforms, err.Error())
+			return field.Invalid(field.NewPath("transforms").Index(i), transforms, err.Error())
 		}
 	}
 
-	if transformedToType == composition.TransformOutputTypeAny {
+	if transformedToType == v1.TransformOutputTypeAny {
 		return nil
 	}
 
 	// integer is a subset of number per JSON specification:
 	// https://datatracker.ietf.org/doc/html/draft-zyp-json-schema-04#section-3.5
-	if transformedToType == string(BooleanKnownJSONType) && toType == string(NumberKnownJSONType) {
+	if transformedToType == string(schema2.IntegerKnownJSONType) && toType == string(schema2.NumberKnownJSONType) {
 		return nil
 	}
 
 	if transformedToType != toType {
-		return errors.Errorf("transformed output type and to field path have different types (%s != %s)", transformedToType, toType)
+		return field.Invalid(field.NewPath("transforms"), transforms, fmt.Sprintf("transformed output type and to field path have different types (%s != %s)", transformedToType, toType))
 	}
 	return nil
 }
@@ -333,9 +292,9 @@ func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fie
 	case fieldpath.SegmentField:
 		propType := parent.Type
 		if propType == "" {
-			propType = string(ObjectKnownJSONType)
+			propType = string(schema2.ObjectKnownJSONType)
 		}
-		if propType != string(ObjectKnownJSONType) {
+		if propType != string(schema2.ObjectKnownJSONType) {
 			return nil, false, errors.Errorf("trying to access field of not an object: %v", propType)
 		}
 		prop, exists := parent.Properties[segment.Field]
@@ -359,7 +318,7 @@ func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fie
 		}
 		return &prop, required, nil
 	case fieldpath.SegmentIndex:
-		if parent.Type != string(ArrayKnownJSONType) {
+		if parent.Type != string(schema2.ArrayKnownJSONType) {
 			return nil, false, errors.Errorf("accessing by index a %s field", parent.Type)
 		}
 		if parent.Items == nil {

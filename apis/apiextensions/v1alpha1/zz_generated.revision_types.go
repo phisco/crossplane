@@ -625,7 +625,7 @@ type StringTransformType string
 
 // Accepted StringTransformTypes.
 const (
-	StringTransformTypeFormat     StringTransformType = "Format" // Default
+	StringTransformTypeFormat     StringTransformType = "format" // Default
 	StringTransformTypeConvert    StringTransformType = "Convert"
 	StringTransformTypeTrimPrefix StringTransformType = "TrimPrefix"
 	StringTransformTypeTrimSuffix StringTransformType = "TrimSuffix"
@@ -652,8 +652,8 @@ type StringTransform struct {
 
 	// Type of the string transform to be run.
 	// +optional
-	// +kubebuilder:validation:Enum=Format;Convert;TrimPrefix;TrimSuffix;Regexp
-	// +kubebuilder:default=Format
+	// +kubebuilder:validation:Enum=format;Convert;TrimPrefix;TrimSuffix;Regexp
+	// +kubebuilder:default=format
 	Type StringTransformType `json:"type,omitempty"`
 
 	// Format the input using a Go format string. See

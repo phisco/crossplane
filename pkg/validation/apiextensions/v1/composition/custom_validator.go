@@ -114,7 +114,7 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 		return nil
 	}
 
-	// From here on we should refactor the code to allow using it from linters/Lsp
+	// from here on we should refactor the code to allow using it from linters/Lsp
 	// TODO (lsviben) figure out how to emit warnings instead of errors in case of WARN state (strict, but just warnings)
 	if errs := ValidateComposition(ctx, comp, gvkToCRDs, c.reader); len(errs) != 0 {
 		return apierrors.NewInvalid(comp.GroupVersionKind().GroupKind(), comp.GetName(), errs)

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package validation
+package v1
 
 import (
 	"testing"
@@ -24,19 +24,17 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
-
-	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 )
 
 func TestRejectMixedTemplates(t *testing.T) {
 	cases := map[string]struct {
-		comp *v1.Composition
+		comp *Composition
 		want error
 	}{
 		"Mixed": {
-			comp: &v1.Composition{
-				Spec: v1.CompositionSpec{
-					Resources: []v1.ComposedTemplate{
+			comp: &Composition{
+				Spec: CompositionSpec{
+					Resources: []ComposedTemplate{
 						{
 							// Unnamed.
 						},
@@ -49,9 +47,9 @@ func TestRejectMixedTemplates(t *testing.T) {
 			want: errors.New(errMixed),
 		},
 		"Anonymous": {
-			comp: &v1.Composition{
-				Spec: v1.CompositionSpec{
-					Resources: []v1.ComposedTemplate{
+			comp: &Composition{
+				Spec: CompositionSpec{
+					Resources: []ComposedTemplate{
 						{
 							// Unnamed.
 						},
@@ -64,9 +62,9 @@ func TestRejectMixedTemplates(t *testing.T) {
 			want: nil,
 		},
 		"Named": {
-			comp: &v1.Composition{
-				Spec: v1.CompositionSpec{
-					Resources: []v1.ComposedTemplate{
+			comp: &Composition{
+				Spec: CompositionSpec{
+					Resources: []ComposedTemplate{
 						{
 							Name: pointer.String("cool"),
 						},
@@ -94,13 +92,13 @@ func TestRejectMixedTemplates(t *testing.T) {
 
 func TestRejectDuplicateNames(t *testing.T) {
 	cases := map[string]struct {
-		comp *v1.Composition
+		comp *Composition
 		want error
 	}{
 		"Unique": {
-			comp: &v1.Composition{
-				Spec: v1.CompositionSpec{
-					Resources: []v1.ComposedTemplate{
+			comp: &Composition{
+				Spec: CompositionSpec{
+					Resources: []ComposedTemplate{
 						{
 							Name: pointer.String("cool"),
 						},
@@ -113,9 +111,9 @@ func TestRejectDuplicateNames(t *testing.T) {
 			want: nil,
 		},
 		"Anonymous": {
-			comp: &v1.Composition{
-				Spec: v1.CompositionSpec{
-					Resources: []v1.ComposedTemplate{
+			comp: &Composition{
+				Spec: CompositionSpec{
+					Resources: []ComposedTemplate{
 						{
 							// Unnamed.
 						},
@@ -128,9 +126,9 @@ func TestRejectDuplicateNames(t *testing.T) {
 			want: nil,
 		},
 		"Duplicates": {
-			comp: &v1.Composition{
-				Spec: v1.CompositionSpec{
-					Resources: []v1.ComposedTemplate{
+			comp: &Composition{
+				Spec: CompositionSpec{
+					Resources: []ComposedTemplate{
 						{
 							Name: pointer.String("cool"),
 						},
@@ -158,13 +156,13 @@ func TestRejectDuplicateNames(t *testing.T) {
 
 func TestRejectAnonymousTemplatesWithFunctions(t *testing.T) {
 	cases := map[string]struct {
-		comp *v1.Composition
+		comp *Composition
 		want error
 	}{
 		"AnonymousAndCompFnsNotInUse": {
-			comp: &v1.Composition{
-				Spec: v1.CompositionSpec{
-					Resources: []v1.ComposedTemplate{
+			comp: &Composition{
+				Spec: CompositionSpec{
+					Resources: []ComposedTemplate{
 						{
 							// Anonymous
 						},
@@ -178,9 +176,9 @@ func TestRejectAnonymousTemplatesWithFunctions(t *testing.T) {
 			want: nil,
 		},
 		"AnonymousAndCompFnsInUse": {
-			comp: &v1.Composition{
-				Spec: v1.CompositionSpec{
-					Resources: []v1.ComposedTemplate{
+			comp: &Composition{
+				Spec: CompositionSpec{
+					Resources: []ComposedTemplate{
 						{
 							// Anonymous
 						},
@@ -188,7 +186,7 @@ func TestRejectAnonymousTemplatesWithFunctions(t *testing.T) {
 							// Anonymous
 						},
 					},
-					Functions: []v1.Function{{
+					Functions: []Function{{
 						Name: "cool-fn",
 					}},
 				},
@@ -196,9 +194,9 @@ func TestRejectAnonymousTemplatesWithFunctions(t *testing.T) {
 			want: errors.New(errFnsRequireNames),
 		},
 		"NamedAndCompFnsInUse": {
-			comp: &v1.Composition{
-				Spec: v1.CompositionSpec{
-					Resources: []v1.ComposedTemplate{
+			comp: &Composition{
+				Spec: CompositionSpec{
+					Resources: []ComposedTemplate{
 						{
 							Name: pointer.String("cool"),
 						},
@@ -206,7 +204,7 @@ func TestRejectAnonymousTemplatesWithFunctions(t *testing.T) {
 							Name: pointer.String("cooler"),
 						},
 					},
-					Functions: []v1.Function{{
+					Functions: []Function{{
 						Name: "cool-fn",
 					}},
 				},
@@ -229,35 +227,35 @@ func TestRejectAnonymousTemplatesWithFunctions(t *testing.T) {
 
 func TestRejectFunctionsWithoutRequiredConfig(t *testing.T) {
 	cases := map[string]struct {
-		comp *v1.Composition
+		comp *Composition
 		want error
 	}{
 		"UnknownType": {
-			comp: &v1.Composition{
-				Spec: v1.CompositionSpec{
-					Functions: []v1.Function{{
+			comp: &Composition{
+				Spec: CompositionSpec{
+					Functions: []Function{{
 						Type: "wat",
 					}},
 				},
 			},
-			want: errors.Errorf(v1.ErrFmtUnknownFnType, "wat"),
+			want: errors.Errorf(ErrFmtUnknownFnType, "wat"),
 		},
 		"MissingContainerConfig": {
-			comp: &v1.Composition{
-				Spec: v1.CompositionSpec{
-					Functions: []v1.Function{{
-						Type: v1.FunctionTypeContainer,
+			comp: &Composition{
+				Spec: CompositionSpec{
+					Functions: []Function{{
+						Type: FunctionTypeContainer,
 					}},
 				},
 			},
-			want: errors.New(v1.ErrFnMissingContainerConfig),
+			want: errors.New(ErrFnMissingContainerConfig),
 		},
 		"HasContainerConfig": {
-			comp: &v1.Composition{
-				Spec: v1.CompositionSpec{
-					Functions: []v1.Function{{
-						Type: v1.FunctionTypeContainer,
-						Container: &v1.ContainerFunction{
+			comp: &Composition{
+				Spec: CompositionSpec{
+					Functions: []Function{{
+						Type: FunctionTypeContainer,
+						Container: &ContainerFunction{
 							Image: "example.org/coolimg",
 						},
 					}},

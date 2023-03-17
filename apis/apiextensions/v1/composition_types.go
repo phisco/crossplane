@@ -29,8 +29,6 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composed"
-
-	"github.com/crossplane/crossplane/internal/controller/apiextensions/composition/validation"
 )
 
 const (
@@ -489,9 +487,11 @@ type CompositionList struct {
 }
 
 // Validate performs logical validation of a Composition.
+//
+//nolint:gocyclo // TODO(phisco): refactor
 func (c *Composition) Validate() (errs field.ErrorList) {
 	// Perform logical checks
-	if err := validation.GetLogicalChecks().Validate(c); err != nil {
+	if err := defaultValidationChain.Validate(c); err != nil {
 		errs = append(errs, err...)
 	}
 

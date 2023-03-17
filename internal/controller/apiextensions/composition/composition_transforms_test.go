@@ -892,7 +892,7 @@ func TestConvertResolve(t *testing.T) {
 				to: v1.ConvertTransformTypeString,
 			},
 			want: want{
-				err: errors.Errorf(errFmtConvertInputTypeNotSupported, reflect.TypeOf([]int{}).Kind().String()),
+				err: errors.Errorf("input type %s is not supported", reflect.TypeOf([]int{}).Kind().String()),
 			},
 		},
 		"ConversionPairFormatNotSupported": {

@@ -58,9 +58,12 @@ func ValidateComposition(
 	gvkToCRDs map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition,
 	reader client.Reader,
 ) (errs field.ErrorList) {
+	if errs := comp.Validate(); len(errs) != 0 {
+		return errs
+	}
 
 	// Validate patches given the above CRDs, skip if any of the required CRDs is not available
-	if patchErrs := ValidatePatchesWithSchemas(comp, gvkToCRDs); len(patchErrs) > 0 {
+	if patchErrs := validatePatchesWithSchemas(comp, gvkToCRDs); len(patchErrs) > 0 {
 		errs = append(errs, patchErrs...)
 		return errs
 	}
@@ -107,8 +110,14 @@ func ValidateComposition(
 
 	// Render resources => reuse existing logic
 	clientWithFallbackReader := xprvalidation.NewClientWithFallbackReader(c, reader)
-	r := composite.NewReconcilerFromClient(clientWithFallbackReader, resource.CompositeKind(schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
-		comp.Spec.CompositeTypeRef.Kind)))
+	r := composite.NewReconcilerFromClient(
+		clientWithFallbackReader,
+		resource.CompositeKind(schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
+			comp.Spec.CompositeTypeRef.Kind)),
+		composite.WithCompositionValidator(xprvalidation.ValidatorFn[v1.Composition](func(in *v1.Composition) field.ErrorList {
+			return nil
+		})),
+	)
 	if _, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: compositeResourceValidationName, Namespace: compositeResourceValidationNamespace}}); err != nil {
 		errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot render resources")))
 		return errs

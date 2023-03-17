@@ -47,6 +47,10 @@ func ValidateReadinessCheck( //nolint:gocyclo // TODO(lsviben): refactor
 			))
 		}
 		for j, r := range resource.ReadinessChecks {
+			if err := r.Validate(); err != nil {
+				errs = append(errs, field.Invalid(field.NewPath("spec", "resource").Index(i).Child("readinessCheck").Index(j), r, err.Error()))
+				continue
+			}
 			matchType := ""
 			switch r.Type {
 			case v1.ReadinessCheckTypeNone:

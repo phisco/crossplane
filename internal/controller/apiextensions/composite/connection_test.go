@@ -569,7 +569,7 @@ func TestConnectionDetailType(t *testing.T) {
 				Name:                    &name,
 				FromConnectionSecretKey: &key,
 
-				// From key trumps from field
+				// from key trumps from field
 				FromFieldPath: &field,
 			},
 			want: ConnectionDetailTypeFromConnectionSecretKey,

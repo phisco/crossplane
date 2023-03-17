@@ -23,13 +23,13 @@ import (
 	"strconv"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/validation/field"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	compositionValidation "github.com/crossplane/crossplane/internal/controller/apiextensions/composition/validation"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
@@ -348,7 +348,9 @@ func NewReconcilerFromClient(kube client.Client, of resource.CompositeKind, opts
 
 		composition: composition{
 			CompositionFetcher: NewAPICompositionFetcher(kube),
-			Validator:          compositionValidation.GetLogicalChecks(),
+			Validator: validation.ValidatorFn[v1.Composition](func(in *v1.Composition) field.ErrorList {
+				return in.Validate()
+			}),
 		},
 
 		environment: environment{
@@ -483,10 +485,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{Requeue: true}, errors.Wrap(r.client.Status().Update(ctx, xr), errUpdateStatus)
 	}
 
-	// TODO(phisco): refactor it and replace it with a NopValidator as otherwise we run it twice in validation webhook
-	// TODO(negz): Composition compositionValidation should be handled by a compositionValidation
-	// webhook, not by this controller.
-	if err := r.composition.ValidateError(comp); err != nil {
+	if err := r.composition.Validate(comp); err != nil {
+		err := error(err.ToAggregate())
 		log.Debug(errValidate, "error", err)
 		err = errors.Wrap(err, errValidate)
 		r.record.Event(xr, event.Warning(reasonCompose, err))
