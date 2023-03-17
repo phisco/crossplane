@@ -67,9 +67,13 @@ func ValidateComposition(
 		return errs
 	}
 
-	// TODO(lsviben) validate ReadinessCheck
 	if connErrs := ValidateConnectionDetails(comp, gvkToCRDs); len(connErrs) > 0 {
 		errs = append(errs, connErrs...)
+		return errs
+	}
+
+	if readErrs := ValidateReadinessCheck(comp, gvkToCRDs); len(readErrs) > 0 {
+		errs = append(errs, readErrs...)
 		return errs
 	}
 

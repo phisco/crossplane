@@ -117,6 +117,8 @@ func ValidatePatch( //nolint:gocyclo // TODO(phisco): refactor
 		return field.Invalid(field.NewPath("spec", "resource").Index(resourceNumber).Child("base"), resource.Base, err.Error())
 	}
 
+	// TODO(phisco): what about patch.Policy ?
+
 	compositeCRD, compositeOK := gvkToCRD[schema.FromAPIVersionAndKind(
 		comp.Spec.CompositeTypeRef.APIVersion,
 		comp.Spec.CompositeTypeRef.Kind,

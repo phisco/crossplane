@@ -28,7 +28,8 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 )
 
-// ValidateConnectionDetails validates the connection details of a composition.
+// ValidateConnectionDetails validates the connection details of a composition. It only checks the
+// FromFieldPath as that is the only one we are able to validate with certainty.
 func ValidateConnectionDetails(comp *v1.Composition, gvkToCRD map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition) (errs field.ErrorList) {
 	for i, resource := range comp.Spec.Resources {
 		gvk, err := resource.GetObjectGVK()
@@ -42,13 +43,13 @@ func ValidateConnectionDetails(comp *v1.Composition, gvkToCRD map[schema.GroupVe
 				fmt.Errorf("crd for gvk %q not found", gvk),
 			))
 		}
-		for _, con := range resource.ConnectionDetails {
+		for j, con := range resource.ConnectionDetails {
 			if con.FromFieldPath == nil {
 				continue
 			}
 			_, _, err = validateFieldPath(crd.Spec.Validation.OpenAPIV3Schema, *con.FromFieldPath)
 			if err != nil {
-				errs = append(errs, field.Invalid(field.NewPath("spec", "resource").Index(i).Child("base"), *con.FromFieldPath, err.Error()))
+				errs = append(errs, field.Invalid(field.NewPath("spec", "resource").Index(i).Child("base").Child("connectionDetails").Index(j).Child("fromFieldPath"), *con.FromFieldPath, err.Error()))
 			}
 		}
 	}

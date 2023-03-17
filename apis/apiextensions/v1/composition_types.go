@@ -17,6 +17,8 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -236,6 +238,30 @@ type ReadinessCheck struct {
 	// MatchInt is the value you'd like to match if you're using "MatchInt" type.
 	// +optional
 	MatchInteger int64 `json:"matchInteger,omitempty"`
+}
+
+// Validate checks if the readiness check is logically valid.
+func (r *ReadinessCheck) Validate() error {
+	switch r.Type {
+	case ReadinessCheckTypeNone:
+		return nil
+	// NOTE: ComposedTemplate doesn't use pointer values for optional
+	// strings, so today the empty string and 0 are equivalent to "unset".
+	case ReadinessCheckTypeMatchString:
+		if r.MatchString == "" {
+			return fmt.Errorf("expected non empty matchString for type %s", r.Type)
+		}
+	case ReadinessCheckTypeMatchInteger:
+		if r.MatchInteger == 0 {
+			return fmt.Errorf("expected non empty matchInteger for type %s", r.Type)
+		}
+	case ReadinessCheckTypeNonEmpty:
+	}
+	if r.FieldPath == "" {
+		return fmt.Errorf("expected non empty fieldPath for type %s", r.Type)
+	}
+
+	return nil
 }
 
 // A ConnectionDetailType is a type of connection detail.
