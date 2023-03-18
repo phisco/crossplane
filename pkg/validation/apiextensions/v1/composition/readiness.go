@@ -37,18 +37,18 @@ func ValidateReadinessCheck( //nolint:gocyclo // TODO(lsviben): refactor
 	for i, resource := range comp.Spec.Resources {
 		gvk, err := resource.GetObjectGVK()
 		if err != nil {
-			return append(errs, field.InternalError(field.NewPath("spec", "resource").Index(i), errors.Wrap(err, "cannot get object gvk")))
+			return append(errs, field.InternalError(field.NewPath("spec", "resources").Index(i), errors.Wrap(err, "cannot get object gvk")))
 		}
 		crd, ok := gvkToCRD[gvk]
 		if !ok {
 			return append(errs, field.InternalError(
-				field.NewPath("spec", "resource").Index(i),
+				field.NewPath("spec", "resources").Index(i),
 				fmt.Errorf("crd for gvk %q not found", gvk),
 			))
 		}
 		for j, r := range resource.ReadinessChecks {
 			if err := r.Validate(); err != nil {
-				errs = append(errs, field.Invalid(field.NewPath("spec", "resource").Index(i).Child("readinessCheck").Index(j), r, err.Error()))
+				errs = append(errs, field.Invalid(field.NewPath("spec", "resources").Index(i).Child("readinessCheck").Index(j), r, err.Error()))
 				continue
 			}
 			matchType := ""
@@ -65,11 +65,11 @@ func ValidateReadinessCheck( //nolint:gocyclo // TODO(lsviben): refactor
 			}
 			fieldType, _, err := validateFieldPath(crd.Spec.Validation.OpenAPIV3Schema, r.FieldPath)
 			if err != nil {
-				errs = append(errs, field.Invalid(field.NewPath("spec", "resource").Index(i).Child("readinessCheck").Index(j).Child("fieldPath"), r.FieldPath, err.Error()))
+				errs = append(errs, field.Invalid(field.NewPath("spec", "resources").Index(i).Child("readinessCheck").Index(j).Child("fieldPath"), r.FieldPath, err.Error()))
 				continue
 			}
 			if matchType != "" && matchType != fieldType {
-				errs = append(errs, field.Invalid(field.NewPath("spec", "resource").Index(i).Child("readinessCheck").Index(j).Child("fieldPath"), r.FieldPath, fmt.Sprintf("expected field path to be of type %s", matchType)))
+				errs = append(errs, field.Invalid(field.NewPath("spec", "resources").Index(i).Child("readinessCheck").Index(j).Child("fieldPath"), r.FieldPath, fmt.Sprintf("expected field path to be of type %s", matchType)))
 			}
 		}
 	}

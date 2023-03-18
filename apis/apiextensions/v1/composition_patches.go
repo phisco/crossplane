@@ -17,8 +17,11 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+
+	"k8s.io/apimachinery/pkg/util/validation/field"
+
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
-	"github.com/crossplane/crossplane-runtime/pkg/errors"
 )
 
 // A PatchType is a type of patch.
@@ -103,19 +106,19 @@ type Patch struct {
 }
 
 // Validate the Patch object.
-func (p *Patch) Validate() error {
+func (p *Patch) Validate() *field.Error {
 	switch p.GetType() {
 	case PatchTypeFromCompositeFieldPath, PatchTypeFromEnvironmentFieldPath, PatchTypeToCompositeFieldPath, PatchTypeToEnvironmentFieldPath:
 		if p.FromFieldPath == nil {
-			return errors.New("fromFieldPath must be set for patch type " + string(p.Type))
+			return field.Required(field.NewPath("fromFieldPath"), fmt.Sprintf("fromFieldPath must be set for patch type %s", p.Type))
 		}
 	case PatchTypePatchSet:
 		if p.PatchSetName == nil {
-			return errors.New("patchSetName must be set for patch type " + string(p.Type))
+			return field.Required(field.NewPath("patchSetName"), fmt.Sprintf("patchSetName must be set for patch type %s", p.Type))
 		}
 	case PatchTypeCombineFromEnvironment, PatchTypeCombineFromComposite, PatchTypeCombineToComposite, PatchTypeCombineToEnvironment:
 		if p.Combine == nil {
-			return errors.New("combine must be set for patch type " + string(p.Type))
+			return field.Required(field.NewPath("combine"), fmt.Sprintf("combine must be set for patch type %s", p.Type))
 		}
 	}
 

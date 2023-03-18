@@ -74,7 +74,7 @@ func TestValidateConnectionDetails(t *testing.T) {
 				gvkToCRD: defaultGVKToCRDs(),
 			},
 			wantErrs: true,
-			//wantErrs: field.Invalid(field.NewPath("spec", "resource").Index(0).Child("base"), "invalid", fmt.Sprintf("unable to find field: invalid")),
+			//wantErrs: field.Invalid(field.NewPath("spec", "resources").Index(0).Child("base"), "invalid", fmt.Sprintf("unable to find field: invalid")),
 		},
 	}
 	for _, tt := range tests {

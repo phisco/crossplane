@@ -19,6 +19,8 @@ package v1
 import (
 	"encoding/json"
 
+	"k8s.io/apimachinery/pkg/util/validation/field"
+
 	"github.com/crossplane/crossplane/pkg/validation/schema"
 
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -72,27 +74,27 @@ type Transform struct {
 // Validate this Transform is valid.
 //
 //nolint:gocyclo // This is a long but simple/same-y switch.
-func (t *Transform) Validate() error {
+func (t *Transform) Validate() *field.Error {
 	switch t.Type {
 	case TransformTypeMath:
 		if t.Math == nil {
-			return errors.Errorf("given transform type %s requires configuration", t.Type)
+			return field.Required(field.NewPath("math"), "given transform type math requires configuration")
 		}
 	case TransformTypeMap:
 		if t.Map == nil {
-			return errors.Errorf("given transform type %s requires configuration", t.Type)
+			return field.Required(field.NewPath("map"), "given transform type map requires configuration")
 		}
 	case TransformTypeMatch:
 		if t.Match == nil {
-			return errors.Errorf("given transform type %s requires configuration", t.Type)
+			return field.Required(field.NewPath("match"), "given transform type match requires configuration")
 		}
 	case TransformTypeString:
 		if t.String == nil {
-			return errors.Errorf("given transform type %s requires configuration", t.Type)
+			return field.Required(field.NewPath("string"), "given transform type string requires configuration")
 		}
 	case TransformTypeConvert:
 		if t.Convert == nil {
-			return errors.Errorf("given transform type %s requires configuration", t.Type)
+			return field.Required(field.NewPath("convert"), "given transform type convert requires configuration")
 		}
 	}
 

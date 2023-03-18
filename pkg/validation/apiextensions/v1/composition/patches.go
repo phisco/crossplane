@@ -58,16 +58,16 @@ func validatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): refactor
 	gvkToCRD map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition,
 ) *field.Error {
 	if len(comp.Spec.Resources) <= resourceNumber {
-		return field.InternalError(field.NewPath("spec", "resource").Index(resourceNumber), errors.Errorf("cannot find resource"))
+		return field.InternalError(field.NewPath("spec", "resources").Index(resourceNumber), errors.Errorf("cannot find resource"))
 	}
 	if len(comp.Spec.Resources[resourceNumber].Patches) <= patchNumber {
-		return field.InternalError(field.NewPath("spec", "resource").Index(resourceNumber).Child("patches").Index(patchNumber), errors.Errorf("cannot find patch"))
+		return field.InternalError(field.NewPath("spec", "resources").Index(resourceNumber).Child("patches").Index(patchNumber), errors.Errorf("cannot find patch"))
 	}
 	resource := comp.Spec.Resources[resourceNumber]
 	patch := resource.Patches[patchNumber]
 	res, err := resource.GetBaseObject()
 	if err != nil {
-		return field.Invalid(field.NewPath("spec", "resource").Index(resourceNumber).Child("base"), resource.Base, err.Error())
+		return field.Invalid(field.NewPath("spec", "resources").Index(resourceNumber).Child("base"), resource.Base, err.Error())
 	}
 
 	// TODO(phisco): what about patch.Policy ?
@@ -111,11 +111,11 @@ func validatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): refactor
 			compositeCRD.Spec.Validation.OpenAPIV3Schema)
 	}
 	if validationErr != nil {
-		return field.Invalid(field.NewPath(validationErr.Field, "spec", "resource").Index(resourceNumber).Child("patches").Index(patchNumber), tryJSONMarshal(patch), validationErr.Error())
+		return field.Invalid(field.NewPath(validationErr.Field, "spec", "resources").Index(resourceNumber).Child("patches").Index(patchNumber), tryJSONMarshal(patch), validationErr.Error())
 	}
 
 	return AddPath(
-		field.NewPath("spec", "resource").Index(resourceNumber).Child("patches").Index(patchNumber),
+		field.NewPath("spec", "resources").Index(resourceNumber).Child("patches").Index(patchNumber),
 		validateTransformsIOTypes(patch.Transforms, fromType, toType),
 	)
 }
