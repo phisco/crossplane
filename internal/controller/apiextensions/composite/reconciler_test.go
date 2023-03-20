@@ -754,7 +754,6 @@ func WantComposite(t *testing.T, want resource.Composite) func(ctx context.Conte
 }
 
 func TestFilterToXRPatches(t *testing.T) {
-	t.Helper()
 	toXR1 := v1.Patch{
 		Type: v1.PatchTypeToCompositeFieldPath,
 	}

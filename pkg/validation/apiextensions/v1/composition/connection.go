@@ -28,9 +28,9 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 )
 
-// ValidateConnectionDetails validates the connection details of a composition. It only checks the
+// validateConnectionDetailsWithSchemas validates the connection details of a composition. It only checks the
 // FromFieldPath as that is the only one we are able to validate with certainty.
-func ValidateConnectionDetails(comp *v1.Composition, gvkToCRD map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition) (errs field.ErrorList) {
+func validateConnectionDetailsWithSchemas(comp *v1.Composition, gvkToCRD map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition) (errs field.ErrorList) {
 	for i, resource := range comp.Spec.Resources {
 		gvk, err := resource.GetObjectGVK()
 		if err != nil {

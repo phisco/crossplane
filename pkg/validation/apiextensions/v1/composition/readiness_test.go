@@ -169,8 +169,8 @@ func TestValidateReadinessCheck(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if gotErrs := ValidateReadinessCheck(tt.args.comp, tt.args.gvkToCRD); (len(gotErrs) != 0) != tt.wantErrs {
-				t.Errorf("ValidateReadinessCheck() = %v, want %v", gotErrs, tt.wantErrs)
+			if gotErrs := validateReadinessCheckWithSchemas(tt.args.comp, tt.args.gvkToCRD); (len(gotErrs) != 0) != tt.wantErrs {
+				t.Errorf("validateReadinessCheckWithSchemas() = %v, want %v", gotErrs, tt.wantErrs)
 			}
 		})
 	}

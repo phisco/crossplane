@@ -121,6 +121,11 @@ func (p *Patch) Validate() *field.Error {
 			return field.Required(field.NewPath("combine"), fmt.Sprintf("combine must be set for patch type %s", p.Type))
 		}
 	}
+	for i, transform := range p.Transforms {
+		if err := transform.Validate(); err != nil {
+			return WrapFieldError(err, field.NewPath("transforms").Index(i))
+		}
+	}
 
 	return nil
 }

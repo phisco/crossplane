@@ -355,7 +355,7 @@ func TestPatchApply(t *testing.T) {
 			},
 		},
 		"MergeOptionsKeepMapValues": {
-			reason: "Setting MergeOptions.keepMapValues = true adds new map values to existing ones",
+			reason: "Setting mergeOptions.keepMapValues = true adds new map values to existing ones",
 			args: args{
 				patch: v1.Patch{
 					Type:          v1.PatchTypeFromCompositeFieldPath,

@@ -19,14 +19,15 @@ package composition
 import (
 	"testing"
 
+	"github.com/crossplane/crossplane/pkg/validation/schema"
+
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 )
 
 func Test_validateTransforms(t *testing.T) {
 	type args struct {
-		transforms []v1.Transform
-		fromType   string
-		toType     string
+		transforms       []v1.Transform
+		fromType, toType schema.KnownJSONType
 	}
 	tests := []struct {
 		name    string
@@ -95,7 +96,7 @@ func Test_validateTransforms(t *testing.T) {
 			},
 		},
 		{
-			name:    "Should reject convert number to integer transforms successfully",
+			name:    "Should reject convert number to integer transforms",
 			wantErr: true,
 			args: args{
 				transforms: []v1.Transform{

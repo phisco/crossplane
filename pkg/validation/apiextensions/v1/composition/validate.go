@@ -68,12 +68,12 @@ func ValidateComposition(
 		return errs
 	}
 
-	if connErrs := ValidateConnectionDetails(comp, gvkToCRDs); len(connErrs) > 0 {
+	if connErrs := validateConnectionDetailsWithSchemas(comp, gvkToCRDs); len(connErrs) > 0 {
 		errs = append(errs, connErrs...)
 		return errs
 	}
 
-	if readErrs := ValidateReadinessCheck(comp, gvkToCRDs); len(readErrs) > 0 {
+	if readErrs := validateReadinessCheckWithSchemas(comp, gvkToCRDs); len(readErrs) > 0 {
 		errs = append(errs, readErrs...)
 		return errs
 	}
@@ -132,6 +132,7 @@ func ValidateComposition(
 		}
 		composedRes := &unstructured.UnstructuredList{}
 		composedRes.SetGroupVersionKind(gvk)
+		// TODO(phisco) add a method to the MappedClient to get everything created
 		err := c.List(ctx, composedRes, client.MatchingLabels{xcrd.LabelKeyNamePrefixForComposed: compositeResourceValidationName})
 		if err != nil {
 			errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot list composed resources")))

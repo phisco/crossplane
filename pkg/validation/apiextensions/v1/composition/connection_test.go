@@ -79,8 +79,8 @@ func TestValidateConnectionDetails(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if gotErrs := ValidateConnectionDetails(tt.args.comp, tt.args.gvkToCRD); (len(gotErrs) != 0) != tt.wantErrs {
-				t.Errorf("ValidateConnectionDetails() = %v, want %v", gotErrs, tt.wantErrs)
+			if gotErrs := validateConnectionDetailsWithSchemas(tt.args.comp, tt.args.gvkToCRD); (len(gotErrs) != 0) != tt.wantErrs {
+				t.Errorf("validateConnectionDetailsWithSchemas() = %v, want %v", gotErrs, tt.wantErrs)
 			}
 		})
 	}

@@ -2,23 +2,40 @@
 // As defined by https://datatracker.ietf.org/doc/html/draft-zyp-json-schema-04
 package schema
 
-// KnownJSONTypes is all the known JSON types.
+// KnownJSONType is all the known JSON types.
 // See https://datatracker.ietf.org/doc/html/draft-zyp-json-schema-04#section-3.5
-type KnownJSONTypes string
+type KnownJSONType string
 
 const (
 	// ArrayKnownJSONType is the JSON type for arrays.
-	ArrayKnownJSONType KnownJSONTypes = "array"
+	ArrayKnownJSONType KnownJSONType = "array"
 	// BooleanKnownJSONType is the JSON type for booleans.
-	BooleanKnownJSONType KnownJSONTypes = "boolean"
+	BooleanKnownJSONType KnownJSONType = "boolean"
 	// IntegerKnownJSONType is the JSON type for integers.
-	IntegerKnownJSONType KnownJSONTypes = "integer"
+	IntegerKnownJSONType KnownJSONType = "integer"
 	// NullKnownJSONType is the JSON type for null.
-	NullKnownJSONType KnownJSONTypes = "null"
+	NullKnownJSONType KnownJSONType = "null"
 	// NumberKnownJSONType is the JSON type for numbers.
-	NumberKnownJSONType KnownJSONTypes = "number"
+	NumberKnownJSONType KnownJSONType = "number"
 	// ObjectKnownJSONType is the JSON type for objects.
-	ObjectKnownJSONType KnownJSONTypes = "object"
+	ObjectKnownJSONType KnownJSONType = "object"
 	// StringKnownJSONType is the JSON type for strings.
-	StringKnownJSONType KnownJSONTypes = "string"
+	StringKnownJSONType KnownJSONType = "string"
 )
+
+// IsEquivalent returns true if the two supplied types are equal, or if the first
+// type is an integer and the second is a number. This is because the JSON
+// schema spec allows integers to be used in place of numbers.
+func (t KnownJSONType) IsEquivalent(t2 KnownJSONType) bool {
+	return t == t2 || (t == IntegerKnownJSONType && t2 == NumberKnownJSONType)
+}
+
+// IsKnownJSONType returns true if the supplied string is a known JSON type.
+func IsKnownJSONType(t string) bool {
+	switch KnownJSONType(t) {
+	case ArrayKnownJSONType, BooleanKnownJSONType, IntegerKnownJSONType, NullKnownJSONType, NumberKnownJSONType, ObjectKnownJSONType, StringKnownJSONType:
+		return true
+	default:
+		return false
+	}
+}

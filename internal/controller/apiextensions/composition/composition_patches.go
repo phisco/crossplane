@@ -47,7 +47,7 @@ func ApplyEnvironmentPatch(p v1.EnvironmentPatch, cp, env runtime.Object) error 
 	// TODO(negz): Should this take composite.Resource and *env.Environment as
 	// arguments rather than generic runtime.Objects?
 
-	// to make thing easy, we are going to reuse the logic of a regular
+	// To make thing easy, we are going to reuse the logic of a regular
 	// composition patch.
 	regularPatch := v1.Patch{
 		Type:          p.Type,
@@ -323,11 +323,12 @@ func ComposedTemplates(cs v1.CompositionSpec) ([]v1.ComposedTemplate, error) {
 				continue
 			}
 			if p.PatchSetName == nil {
-				return nil, errors.Errorf("%s is required by type %s", "PatchSetName", p.Type)
+				// Should never happen
+				return nil, errors.Errorf(errFmtRequiredField, "PatchSetName", p.Type)
 			}
 			ps, ok := pn[*p.PatchSetName]
 			if !ok {
-				return nil, errors.Errorf("cannot find PatchSet by name %s", *p.PatchSetName)
+				return nil, errors.Errorf(ErrFmtUndefinedPatchSet, *p.PatchSetName)
 			}
 			po = append(po, ps...)
 		}

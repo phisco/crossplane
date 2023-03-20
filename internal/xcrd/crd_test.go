@@ -210,7 +210,7 @@ func TestForCompositeResource(t *testing.T) {
 								Type:     "object",
 								Required: []string{"storageGB", "engineVersion"},
 								Properties: map[string]extv1.JSONSchemaProps{
-									// from CRDSpecTemplate.Validation
+									// From CRDSpecTemplate.Validation
 									"storageGB": {Type: "integer"},
 									"engineVersion": {
 										Type: "string",
@@ -220,7 +220,7 @@ func TestForCompositeResource(t *testing.T) {
 										},
 									},
 
-									// from CompositeResourceSpecProps()
+									// From CompositeResourceSpecProps()
 									"compositionRef": {
 										Type:     "object",
 										Required: []string{"name"},
@@ -360,7 +360,7 @@ func TestForCompositeResource(t *testing.T) {
 								Properties: map[string]extv1.JSONSchemaProps{
 									"phase": {Type: "string"},
 
-									// from CompositeResourceStatusProps()
+									// From CompositeResourceStatusProps()
 									"conditions": {
 										Description: "Conditions of the resource.",
 										Type:        "array",
@@ -653,7 +653,7 @@ func TestForCompositeResourceClaim(t *testing.T) {
 									Type:     "object",
 									Required: []string{"storageGB", "engineVersion"},
 									Properties: map[string]extv1.JSONSchemaProps{
-										// from CRDSpecTemplate.Validation
+										// From CRDSpecTemplate.Validation
 										"storageGB": {Type: "integer"},
 										"engineVersion": {
 											Type: "string",
@@ -668,7 +668,7 @@ func TestForCompositeResourceClaim(t *testing.T) {
 											Enum: []extv1.JSON{{Raw: []byte(`"Background"`)},
 												{Raw: []byte(`"Foreground"`)}},
 										},
-										// from CompositeResourceClaimSpecProps()
+										// From CompositeResourceClaimSpecProps()
 										"compositionRef": {
 											Type:     "object",
 											Required: []string{"name"},
@@ -778,7 +778,7 @@ func TestForCompositeResourceClaim(t *testing.T) {
 									Properties: map[string]extv1.JSONSchemaProps{
 										"phase": {Type: "string"},
 
-										// from CompositeResourceStatusProps()
+										// From CompositeResourceStatusProps()
 										"conditions": {
 											Description: "Conditions of the resource.",
 											Type:        "array",

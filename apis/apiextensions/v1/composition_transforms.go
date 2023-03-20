@@ -96,58 +96,45 @@ func (t *Transform) Validate() *field.Error {
 		if t.Convert == nil {
 			return field.Required(field.NewPath("convert"), "given transform type convert requires configuration")
 		}
+		format := t.Convert.GetFormat()
+		if !format.IsValid() {
+			return field.Invalid(field.NewPath("convert", "format"), format, "unknown format")
+		}
+	default:
+		return field.Invalid(field.NewPath("type"), t.Type, "unknown transform type")
 	}
 
 	return nil
 }
 
-const (
-	// TransformOutputTypeAny is the output type of a transform that can return any type.
-	TransformOutputTypeAny = "any"
-)
-
-// ValidateIO validates the supplied Transform type, taking into consideration also the input type.
-// It returns the output type of the transform.
+// IsValidInput validates the supplied Transform type, taking into consideration also the input type.
+// It returns the
 //
 //nolint:gocyclo // This is a long but simple/same-y switch.
-func (t *Transform) ValidateIO(fromType string) (string, error) {
-	if fromType == TransformOutputTypeAny {
-		return TransformOutputTypeAny, nil
-	}
+func (t *Transform) IsValidInput(fromType ConvertTransformType) error {
 	switch t.Type {
 	case TransformTypeMath:
-		if fromType != TransformOutputTypeAny && fromType != string(schema.NumberKnownJSONType) && fromType != string(schema.IntegerKnownJSONType) {
-			return "", errors.New("math transform can only be used with numeric types")
+		if fromType != ConvertTransformTypeInt && fromType != ConvertTransformTypeInt64 && fromType != ConvertTransformTypeFloat64 {
+			return errors.New("math transform can only be used with numeric types")
 		}
 	case TransformTypeMap:
-		if fromType != TransformOutputTypeAny && fromType != string(schema.StringKnownJSONType) {
-			return "", errors.Errorf("map transform can only be used with string types, got %s", fromType)
+		if fromType != ConvertTransformTypeString {
+			return errors.Errorf("map transform can only be used with string types, got %s", fromType)
 		}
 	case TransformTypeMatch:
-		if fromType != TransformOutputTypeAny && fromType != string(schema.StringKnownJSONType) {
-			return "", errors.Errorf("match transform can only be used with string input types, got %s", fromType)
+		if fromType != ConvertTransformTypeString {
+			return errors.Errorf("match transform can only be used with string input types, got %s", fromType)
 		}
 	case TransformTypeString:
-		if fromType != TransformOutputTypeAny && fromType != string(schema.StringKnownJSONType) {
-			return "", errors.Errorf("string transform can only be used with string input types, got %s", fromType)
+		if fromType != ConvertTransformTypeString {
+			return errors.Errorf("string transform can only be used with string input types, got %s", fromType)
 		}
 	case TransformTypeConvert:
-		if fromType == string(schema.IntegerKnownJSONType) || fromType == string(schema.NumberKnownJSONType) {
-			fromType = "float64"
-		}
-
-		if fromType == t.Convert.ToType {
-			return "", nil
-		}
-
-		if err := t.Convert.IsValidInput(fromType); err != nil {
-			return "", err
-		}
+		// TODO(phisco): validate with content of conversion[...] using fromType
 	default:
-		return "", errors.Errorf("unknown transform type %s", t.Type)
+		return errors.Errorf("unknown transform type %s", t.Type)
 	}
-
-	return t.GetOutputType()
+	return nil
 }
 
 // GetFormat returns the format of the transform.
@@ -158,52 +145,24 @@ func (t *ConvertTransform) GetFormat() ConvertTransformFormat {
 	return ConvertTransformFormatNone
 }
 
-// IsValidInput returns an error if the given input type is not supported by transform.
-func (t *ConvertTransform) IsValidInput(in string) error {
-	to := t.ToType
-
-	format := t.GetFormat()
-	switch format {
-	case ConvertTransformFormatNone, ConvertTransformFormatQuantity:
-		break
-	default:
-		return errors.Errorf("format %s is not supported", format)
-	}
-
-	switch in {
-	case to:
-		return nil
-	case ConvertTransformTypeString, ConvertTransformTypeBool, ConvertTransformTypeInt, ConvertTransformTypeInt64, ConvertTransformTypeFloat64:
-		return nil
-	default:
-		return errors.Errorf("input type %s is not supported", in)
-	}
-}
-
 // GetOutputType returns the output type of the transform.
 // It returns an error if the transform type is unknown.
-// It returns TransformOutputTypeAny if the output type is not known.
-func (t *Transform) GetOutputType() (string, error) {
+// It returns nil if the output type is not known.
+func (t *Transform) GetOutputType() (*ConvertTransformType, error) {
+	var out ConvertTransformType
 	switch t.Type {
+	case TransformTypeMap, TransformTypeMatch:
+		return nil, nil
 	case TransformTypeMath:
-		return string(schema.NumberKnownJSONType), nil
-	case TransformTypeMap:
-		return TransformOutputTypeAny, nil
-	case TransformTypeMatch:
-		return TransformOutputTypeAny, nil
+		out = ConvertTransformTypeFloat64
 	case TransformTypeString:
-		return string(schema.StringKnownJSONType), nil
+		out = ConvertTransformTypeString
 	case TransformTypeConvert:
-		switch t.Convert.ToType {
-		case "int64", "int":
-			return string(schema.IntegerKnownJSONType), nil
-		case "float", "float64":
-			return string(schema.NumberKnownJSONType), nil
-		}
-		return t.Convert.ToType, nil
+		out = t.Convert.ToType
 	default:
-		return "", errors.Errorf("unknown transform type %s", t.Type)
+		return nil, errors.Errorf("unable to get output type, unknown transform type: %s", t.Type)
 	}
+	return &out, nil
 }
 
 // MathTransform conducts mathematical operations on the input with the given
@@ -295,7 +254,7 @@ type StringTransformType string
 
 // Accepted StringTransformTypes.
 const (
-	StringTransformTypeFormat     StringTransformType = "format" // Default
+	StringTransformTypeFormat     StringTransformType = "Format" // Default
 	StringTransformTypeConvert    StringTransformType = "Convert"
 	StringTransformTypeTrimPrefix StringTransformType = "TrimPrefix"
 	StringTransformTypeTrimSuffix StringTransformType = "TrimSuffix"
@@ -322,8 +281,8 @@ type StringTransform struct {
 
 	// Type of the string transform to be run.
 	// +optional
-	// +kubebuilder:validation:Enum=format;Convert;TrimPrefix;TrimSuffix;Regexp
-	// +kubebuilder:default=format
+	// +kubebuilder:validation:Enum=Format;Convert;TrimPrefix;TrimSuffix;Regexp
+	// +kubebuilder:default=Format
 	Type StringTransformType `json:"type,omitempty"`
 
 	// Format the input using a Go format string. See
@@ -362,14 +321,51 @@ type StringTransformRegexp struct {
 	Group *int `json:"group,omitempty"`
 }
 
+// ConvertTransformType defines the type of a ConvertTransform.
+type ConvertTransformType string
+
 // The list of supported ConvertTransform input and output types.
 const (
-	ConvertTransformTypeString  = "string"
-	ConvertTransformTypeBool    = "bool"
-	ConvertTransformTypeInt     = "int"
-	ConvertTransformTypeInt64   = "int64"
-	ConvertTransformTypeFloat64 = "float64"
+	ConvertTransformTypeString  ConvertTransformType = "string"
+	ConvertTransformTypeBool    ConvertTransformType = "bool"
+	ConvertTransformTypeInt     ConvertTransformType = "int"
+	ConvertTransformTypeInt64   ConvertTransformType = "int64"
+	ConvertTransformTypeFloat64 ConvertTransformType = "float64"
 )
+
+// ToKnownJSONType returns the matching JSON type for the given ConvertTransformType.
+func (c ConvertTransformType) ToKnownJSONType() schema.KnownJSONType {
+	switch c {
+	case ConvertTransformTypeString:
+		return schema.StringKnownJSONType
+	case ConvertTransformTypeBool:
+		return schema.BooleanKnownJSONType
+	case ConvertTransformTypeInt, ConvertTransformTypeInt64:
+		return schema.IntegerKnownJSONType
+	case ConvertTransformTypeFloat64:
+		return schema.NumberKnownJSONType
+	}
+	// should never happen
+	return ""
+}
+
+// FromKnownJSONType returns the ConvertTransformType for the given KnownJSONType.
+func FromKnownJSONType(t schema.KnownJSONType) (ConvertTransformType, error) {
+	switch t {
+	case schema.StringKnownJSONType:
+		return ConvertTransformTypeString, nil
+	case schema.BooleanKnownJSONType:
+		return ConvertTransformTypeBool, nil
+	case schema.IntegerKnownJSONType:
+		return ConvertTransformTypeInt64, nil
+	case schema.NumberKnownJSONType:
+		return ConvertTransformTypeFloat64, nil
+	case schema.ObjectKnownJSONType, schema.ArrayKnownJSONType, schema.NullKnownJSONType:
+		return "", errors.Errorf("JSON type not supported: %q", t)
+	default:
+		return "", errors.Errorf("unknown JSON type: %q", t)
+	}
+}
 
 // ConvertTransformFormat defines the expected format of an input value of a
 // conversion transform.
@@ -381,11 +377,20 @@ const (
 	ConvertTransformFormatQuantity ConvertTransformFormat = "quantity"
 )
 
+// IsValid returns true if the format is valid.
+func (c ConvertTransformFormat) IsValid() bool {
+	switch c {
+	case ConvertTransformFormatNone, ConvertTransformFormatQuantity:
+		return true
+	}
+	return false
+}
+
 // A ConvertTransform converts the input into a new object whose type is supplied.
 type ConvertTransform struct {
 	// ToType is the type of the output of this transform.
 	// +kubebuilder:validation:Enum=string;int;int64;bool;float64
-	ToType string `json:"toType"`
+	ToType ConvertTransformType `json:"toType"`
 
 	// The expected input format.
 	//

@@ -625,7 +625,7 @@ type StringTransformType string
 
 // Accepted StringTransformTypes.
 const (
-	StringTransformTypeFormat     StringTransformType = "format" // Default
+	StringTransformTypeFormat     StringTransformType = "Format" // Default
 	StringTransformTypeConvert    StringTransformType = "Convert"
 	StringTransformTypeTrimPrefix StringTransformType = "TrimPrefix"
 	StringTransformTypeTrimSuffix StringTransformType = "TrimSuffix"
@@ -652,8 +652,8 @@ type StringTransform struct {
 
 	// Type of the string transform to be run.
 	// +optional
-	// +kubebuilder:validation:Enum=format;Convert;TrimPrefix;TrimSuffix;Regexp
-	// +kubebuilder:default=format
+	// +kubebuilder:validation:Enum=Format;Convert;TrimPrefix;TrimSuffix;Regexp
+	// +kubebuilder:default=Format
 	Type StringTransformType `json:"type,omitempty"`
 
 	// Format the input using a Go format string. See
@@ -692,13 +692,16 @@ type StringTransformRegexp struct {
 	Group *int `json:"group,omitempty"`
 }
 
+// A ConvertTransformType defines the type of a conversion transform.
+type ConvertTransformType string
+
 // The list of supported ConvertTransform input and output types.
 const (
-	ConvertTransformTypeString  = "string"
-	ConvertTransformTypeBool    = "bool"
-	ConvertTransformTypeInt     = "int"
-	ConvertTransformTypeInt64   = "int64"
-	ConvertTransformTypeFloat64 = "float64"
+	ConvertTransformTypeString  ConvertTransformType = "string"
+	ConvertTransformTypeBool    ConvertTransformType = "bool"
+	ConvertTransformTypeInt     ConvertTransformType = "int"
+	ConvertTransformTypeInt64   ConvertTransformType = "int64"
+	ConvertTransformTypeFloat64 ConvertTransformType = "float64"
 )
 
 // ConvertTransformFormat defines the expected format of an input value of a
@@ -715,7 +718,7 @@ const (
 type ConvertTransform struct {
 	// ToType is the type of the output of this transform.
 	// +kubebuilder:validation:Enum=string;int;int64;bool;float64
-	ToType string `json:"toType"`
+	ToType ConvertTransformType `json:"toType"`
 
 	// The expected input format.
 	//

@@ -29,16 +29,6 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composed"
 )
 
-const (
-	// ErrFnMissingContainerConfig is the error returned when a function of type Container
-	// does not specify container configuration.
-	ErrFnMissingContainerConfig = "functions of type: Container must specify container configuration"
-
-	// ErrFmtUnknownFnType is the error returned when a function of an unknown type is
-	// specified.
-	ErrFmtUnknownFnType = "unknown function type %q"
-)
-
 // CompositionSpec specifies desired state of a composition.
 type CompositionSpec struct {
 	// CompositeTypeRef specifies the type of composite resource that this
@@ -172,7 +162,7 @@ type ComposedTemplate struct {
 // Uses the cached object if it is available, or parses the raw Base
 // otherwise. The returned object is a deep copy.
 func (ct *ComposedTemplate) GetBaseObject() (client.Object, error) {
-	if err := ct.InitBaseObject(); err != nil {
+	if err := ct.initBaseObject(); err != nil {
 		return nil, err
 	}
 	if ct, ok := ct.Base.Object.(client.Object); ok {
@@ -182,7 +172,7 @@ func (ct *ComposedTemplate) GetBaseObject() (client.Object, error) {
 }
 
 // InitBaseObject parses the raw base and sets the base object.
-func (ct *ComposedTemplate) InitBaseObject() error {
+func (ct *ComposedTemplate) initBaseObject() error {
 	if ct.Base.Object != nil {
 		return nil
 	}
@@ -196,17 +186,17 @@ func (ct *ComposedTemplate) InitBaseObject() error {
 
 // GetName returns the name of the composed template or an empty string if it is nil.
 func (ct *ComposedTemplate) GetName() string {
-	if ct.Name == nil {
-		return ""
+	if ct.Name != nil {
+		return *ct.Name
 	}
-	return *ct.Name
+	return ""
 }
 
 // GetObjectGVK returns the object GVK of the composed template.
 // Uses the cached object if it is available, or parses the raw Base
 // otherwise.
 func (ct *ComposedTemplate) GetObjectGVK() (schema.GroupVersionKind, error) {
-	if err := ct.InitBaseObject(); err != nil {
+	if err := ct.initBaseObject(); err != nil {
 		return schema.GroupVersionKind{}, err
 	}
 	return ct.Base.Object.GetObjectKind().GroupVersionKind(), nil
@@ -344,14 +334,14 @@ type Function struct {
 }
 
 // Validate this Function.
-func (f *Function) Validate() error {
+func (f *Function) Validate() *field.Error {
 	if f.Type == FunctionTypeContainer {
 		if f.Container == nil {
-			return errors.New(ErrFnMissingContainerConfig)
+			return field.Required(field.NewPath("container"), "cannot be empty for type Container")
 		}
 		return nil
 	}
-	return errors.Errorf(ErrFmtUnknownFnType, f.Type)
+	return field.Required(field.NewPath("type"), "the only supported type is Container")
 }
 
 // A FunctionType is a type of Composition Function.
@@ -491,129 +481,4 @@ type CompositionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Composition `json:"items"`
-}
-
-// Validate performs logical validation of a Composition.
-func (c *Composition) Validate() (errs field.ErrorList) {
-	type validationFunc func() field.ErrorList
-	validations := []validationFunc{
-		c.validatePatchSets,
-		c.validateResources,
-		c.validateFunctions,
-	}
-	for _, f := range validations {
-		errs = append(errs, f()...)
-	}
-	return errs
-}
-
-func (c *Composition) validateFunctions() (errs field.ErrorList) {
-	for i, f := range c.Spec.Functions {
-		if err := f.Validate(); err != nil {
-			errs = append(errs, field.Invalid(field.NewPath("spec", "functions").Index(i), f, err.Error()))
-		}
-	}
-	return errs
-}
-
-func (c *Composition) validatePatchSets() (errs field.ErrorList) {
-	for i, s := range c.Spec.PatchSets {
-		for j, p := range s.Patches {
-			if p.Type == PatchTypePatchSet {
-				errs = append(errs, field.Invalid(field.NewPath("spec", "patchSets").Index(i).Child("patches").Index(j).Child("type"), p, errors.New("cannot use patches within patches").Error()))
-				continue
-			}
-			if err := p.Validate(); err != nil {
-				errs = append(errs, WrapFieldError(err, field.NewPath("spec", "patchSets").Index(i).Child("patches").Index(j)))
-			}
-			for k, t := range p.Transforms {
-				if err := t.Validate(); err != nil {
-					errs = append(errs, WrapFieldError(err, field.NewPath("spec", "resources").Index(i).Child("patches").Index(j).Child("transforms").Index(k)))
-				}
-			}
-		}
-	}
-	return errs
-}
-
-// WrapFieldError wraps the given field.Error adding the given field.Path as root of the Field.
-func WrapFieldError(err *field.Error, path *field.Path) *field.Error {
-	if err == nil {
-		return nil
-	}
-	if path == nil {
-		return err
-	}
-	err.Field = path.Child(err.Field).String()
-	return err
-}
-
-func (c *Composition) validateResources() (errs field.ErrorList) {
-	if err := c.validateResourceNames(); err != nil {
-		errs = append(errs, err...)
-	}
-	for i, res := range c.Spec.Resources {
-		for j, patch := range res.Patches {
-			if err := patch.Validate(); err != nil {
-				errs = append(errs, WrapFieldError(err, field.NewPath("spec", "resources").Index(i).Child("patches").Index(j)))
-			}
-
-			for k, t := range patch.Transforms {
-				if err := t.Validate(); err != nil {
-					errs = append(errs, WrapFieldError(err, field.NewPath("spec", "resources").Index(i).Child("patches").Index(j).Child("transforms").Index(k)))
-				}
-			}
-		}
-		for j, rd := range res.ReadinessChecks {
-			if err := rd.Validate(); err != nil {
-				errs = append(errs, WrapFieldError(err, field.NewPath("spec", "resources").Index(i).Child("patches").Index(j)))
-			}
-		}
-	}
-	return errs
-}
-
-// validateResourceNames checks that:
-//  1. Either all resources have a name or they are all anonymous: because if some but not all templates are named it's
-//     safest to refuse to operate. We don't have enough information to use the named composer, but using the anonymous
-//     composer may be surprising. There's a risk that someone added a new anonymous template to a Composition that
-//     otherwise uses named templates. If they added the new template to the beginning or middle of the resources array
-//     using the anonymous composer would be destructive, because it assumes template N always corresponds to existing
-//     template N.
-//  2. All resources have unique names: because other parts of the code require so.
-//  3. If the composition has any functions, it must have only named resources: This is necessary for the
-//     FunctionComposer to be able to associate entries in the spec.resources array with entries in a FunctionIO's observed
-//     and desired arrays
-func (c *Composition) validateResourceNames() (errs field.ErrorList) {
-	seen := map[string]bool{}
-	for resourceIndex, res := range c.Spec.Resources {
-		// Check that all resources have a name and that it is unique.
-		// If the composition has any functions, it must have only named resources.
-		name := res.GetName()
-		if name == "" {
-			// If the composition has any functions, it must have only named resources.
-			if len(c.Spec.Functions) != 0 {
-				errs = append(errs, field.Invalid(field.NewPath("spec", "resources").Index(resourceIndex).Child("name"), name, "cannot have anonymous resources when composition has functions"))
-				continue
-			}
-			// If it's not the first resource, and all previous one were named, then this is an error.
-			if resourceIndex != 0 && len(seen) != 0 {
-				errs = append(errs, field.Invalid(field.NewPath("spec", "resources").Index(resourceIndex).Child("name"), name, "cannot mix named and anonymous resources, all resources must have a name or none must have a name"))
-				continue
-			}
-			continue
-		}
-		// Check that the name is unique
-		if seen[name] {
-			errs = append(errs, field.Duplicate(field.NewPath("spec", "resources").Index(resourceIndex).Child("name"), name))
-			continue
-		}
-		// If it's not the first resource, and all previous one were anonymous, then this is an error.
-		if resourceIndex != 0 && len(seen) == 0 {
-			errs = append(errs, field.Invalid(field.NewPath("spec", "resources").Index(resourceIndex).Child("name"), name, "cannot mix named and anonymous resources, all resources must have a name or none must have a name"))
-			continue
-		}
-		seen[name] = true
-	}
-	return errs
 }

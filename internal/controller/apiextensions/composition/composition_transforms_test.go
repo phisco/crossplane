@@ -817,7 +817,7 @@ func TestStringResolve(t *testing.T) {
 
 func TestConvertResolve(t *testing.T) {
 	type args struct {
-		to     string
+		to     v1.ConvertTransformType
 		format *v1.ConvertTransformFormat
 		i      any
 	}
@@ -892,7 +892,7 @@ func TestConvertResolve(t *testing.T) {
 				to: v1.ConvertTransformTypeString,
 			},
 			want: want{
-				err: errors.Errorf("input type %s is not supported", reflect.TypeOf([]int{}).Kind().String()),
+				err: errors.Errorf(errConvertFormatPairNotSupported, reflect.TypeOf([]int{}).Kind().String(), v1.ConvertTransformTypeString, v1.ConvertTransformFormatNone),
 			},
 		},
 		"ConversionPairFormatNotSupported": {

@@ -193,7 +193,7 @@ func TestWriteImage(t *testing.T) {
 					MockLayers: func() ([]ociv1.Layer, error) {
 						return []ociv1.Layer{
 							&MockLayer{
-								// to cause WriteLayer to fail.
+								// To cause WriteLayer to fail.
 								MockDiffID: func() (ociv1.Hash, error) { return ociv1.Hash{}, errBoom },
 							},
 						}, nil
