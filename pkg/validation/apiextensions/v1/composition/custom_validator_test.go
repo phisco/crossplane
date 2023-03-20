@@ -553,7 +553,6 @@ func TestClientValidator_ValidateCreate(t *testing.T) {
 				}).WithIndex(&extv1.CustomResourceDefinition{}, "spec.names.kind", func(object client.Object) []string {
 					return []string{object.(*extv1.CustomResourceDefinition).Spec.Names.Kind}
 				}).WithRuntimeObjects(tt.args.existingObjs...).Build(),
-				scheme: s,
 			}
 			if err := c.ValidateCreate(context.TODO(), tt.args.obj); (err != nil) != tt.wantErr {
 				t.Errorf("ValidateCreate() error = %v, wantErr %v", err, tt.wantErr)

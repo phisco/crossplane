@@ -22,25 +22,28 @@ import (
 	"errors"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/util/validation/field"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apivalidation "k8s.io/apiextensions-apiserver/pkg/apiserver/validation"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/crossplane/crossplane/apis"
 
 	xperrors "github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	xprcomposite "github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composite"
 	xprvalidation "github.com/crossplane/crossplane-runtime/pkg/validation"
+	"github.com/crossplane/crossplane/internal/xcrd"
 
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 	"github.com/crossplane/crossplane/internal/controller/apiextensions/composite"
-	"github.com/crossplane/crossplane/internal/xcrd"
 )
 
 const (
@@ -48,16 +51,24 @@ const (
 	compositeResourceValidationNamespace = "validationNamespace"
 )
 
+var (
+	scheme = runtime.NewScheme()
+)
+
+func init() {
+	_ = extv1.AddToScheme(scheme)
+	_ = apis.AddToScheme(scheme)
+}
+
 // ValidateComposition validates the Composition by rendering it and then validating the rendered resources using the
 // provided CustomValidator.
 //
 //nolint:gocyclo // TODO(phisco): Refactor this function.
 func ValidateComposition(
-	ctx context.Context,
 	comp *v1.Composition,
 	gvkToCRDs map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition,
-	reader client.Reader,
 ) (errs field.ErrorList) {
+	ctx := context.Background()
 	if errs := comp.Validate(); len(errs) != 0 {
 		return errs
 	}
@@ -98,7 +109,7 @@ func ValidateComposition(
 		errs = append(errs, field.InternalError(field.NewPath("spec", "compositeTypeRef"), err))
 		return errs
 	}
-	c := &xprvalidation.MapClient{}
+	c := xprvalidation.NewMapClient(scheme)
 	// create all required resources
 	for _, obj := range []client.Object{compositeRes, comp} {
 		err := c.Create(ctx, obj)
@@ -109,14 +120,14 @@ func ValidateComposition(
 	}
 
 	// Render resources => reuse existing logic
-	clientWithFallbackReader := xprvalidation.NewClientWithFallbackReader(c, reader)
 	r := composite.NewReconcilerFromClient(
-		clientWithFallbackReader,
+		c,
 		resource.CompositeKind(schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
 			comp.Spec.CompositeTypeRef.Kind)),
-		composite.WithCompositionValidator(xprvalidation.ValidatorFn[v1.Composition](func(in *v1.Composition) field.ErrorList {
+		composite.WithCompositionValidator(func(in *v1.Composition) field.ErrorList {
 			return nil
-		})),
+		}),
+		// TODO(phisco): handle logger
 	)
 	if _, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: compositeResourceValidationName, Namespace: compositeResourceValidationNamespace}}); err != nil {
 		errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot render resources")))

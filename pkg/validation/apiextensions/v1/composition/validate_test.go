@@ -17,18 +17,12 @@ limitations under the License.
 package composition
 
 import (
-	"context"
 	"testing"
-
-	"github.com/crossplane/crossplane-runtime/pkg/validation"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/crossplane/crossplane/apis"
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 )
 
@@ -248,16 +242,9 @@ func TestValidateComposition(t *testing.T) {
 			},
 		},
 	}
-	commonSetup := func() *fake.ClientBuilder {
-		s := runtime.NewScheme()
-		_ = apis.AddToScheme(s)
-		return fake.NewClientBuilder().
-			WithScheme(s)
-	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			clientWithFallbackReader := validation.NewClientWithFallbackReader(commonSetup().Build(), commonSetup().Build())
-			if err := ValidateComposition(context.TODO(), tt.args.comp, tt.args.gvkToCRDs, clientWithFallbackReader); (err != nil) != tt.wantErr {
+			if err := ValidateComposition(tt.args.comp, tt.args.gvkToCRDs); (err != nil) != tt.wantErr {
 				t.Errorf("ValidateComposition() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

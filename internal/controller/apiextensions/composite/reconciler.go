@@ -40,8 +40,6 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composite"
-	"github.com/crossplane/crossplane-runtime/pkg/validation"
-
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 	env "github.com/crossplane/crossplane/internal/controller/apiextensions/composite/environment"
 )
@@ -252,9 +250,9 @@ func WithCompositionFetcher(f CompositionFetcher) ReconcilerOption {
 
 // WithCompositionValidator specifies how the Reconciler should validate
 // Compositions.
-func WithCompositionValidator(v validation.Validator[v1.Composition]) ReconcilerOption {
+func WithCompositionValidator(v compositionValidatorFunc) ReconcilerOption {
 	return func(r *Reconciler) {
-		r.composition.Validator = v
+		r.composition.compositionValidatorFunc = v
 	}
 }
 
@@ -317,8 +315,14 @@ func WithComposer(c Composer) ReconcilerOption {
 
 type composition struct {
 	CompositionFetcher
-	validation.Validator[v1.Composition]
+	compositionValidatorFunc
 }
+
+func (c *composition) Validate(comp *v1.Composition) field.ErrorList {
+	return c.compositionValidatorFunc(comp)
+}
+
+type compositionValidatorFunc func(*v1.Composition) field.ErrorList
 
 type environment struct {
 	EnvironmentFetcher
@@ -348,9 +352,9 @@ func NewReconcilerFromClient(kube client.Client, of resource.CompositeKind, opts
 
 		composition: composition{
 			CompositionFetcher: NewAPICompositionFetcher(kube),
-			Validator: validation.ValidatorFn[v1.Composition](func(in *v1.Composition) field.ErrorList {
+			compositionValidatorFunc: func(in *v1.Composition) field.ErrorList {
 				return in.Validate()
-			}),
+			},
 		},
 
 		environment: environment{

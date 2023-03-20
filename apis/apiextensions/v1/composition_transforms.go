@@ -131,7 +131,6 @@ func (t *Transform) IsValidInput(fromType ConvertTransformType) error {
 			return errors.Errorf("string transform can only be used with string input types, got %s", fromType)
 		}
 	case TransformTypeConvert:
-		// TODO(phisco): validate with content of conversion[...] using fromType
 		if _, err := t.Convert.GetConversion(fromType); err != nil {
 			return err
 		}

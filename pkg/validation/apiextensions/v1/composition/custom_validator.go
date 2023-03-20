@@ -37,8 +37,14 @@ import (
 // CustomValidator gathers required information using the provided client.Reader and then use them to render and
 // validated a Composition.
 type CustomValidator struct {
-	reader client.Reader
-	scheme *runtime.Scheme
+	reader ReaderWithScheme
+}
+
+// ReaderWithScheme is a client.Reader that also returns the scheme it uses.
+// Unfortunately the client.Reader interface does not have a Scheme() method, only the client.Client interface does.
+type ReaderWithScheme interface {
+	client.Reader
+	Scheme() *runtime.Scheme
 }
 
 // SetupWithManager sets up the CustomValidator with the provided manager, setting up all the required indexes it requires.
@@ -55,7 +61,6 @@ func (c *CustomValidator) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	c.scheme = mgr.GetScheme()
 	c.reader = unstructured.NewClient(mgr.GetClient())
 
 	return ctrl.NewWebhookManagedBy(mgr).
@@ -116,7 +121,7 @@ func (c *CustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 
 	// from here on we should refactor the code to allow using it from linters/Lsp
 	// TODO (lsviben) figure out how to emit warnings instead of errors in case of WARN state (strict, but just warnings)
-	if errs := ValidateComposition(ctx, comp, gvkToCRDs, c.reader); len(errs) != 0 {
+	if errs := ValidateComposition(comp, gvkToCRDs); len(errs) != 0 { //nolint:contextcheck // No need to pass the context here, we are not doing any network calls
 		return apierrors.NewInvalid(comp.GroupVersionKind().GroupKind(), comp.GetName(), errs)
 	}
 	return nil
