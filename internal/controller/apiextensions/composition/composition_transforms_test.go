@@ -18,7 +18,6 @@ package composition
 
 import (
 	"encoding/json"
-	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -892,7 +891,7 @@ func TestConvertResolve(t *testing.T) {
 				to: v1.ConvertTransformTypeString,
 			},
 			want: want{
-				err: errors.Errorf(errConvertFormatPairNotSupported, reflect.TypeOf([]int{}).Kind().String(), v1.ConvertTransformTypeString, v1.ConvertTransformFormatNone),
+				err: errors.Errorf("invalid input type %T", []int{}),
 			},
 		},
 		"ConversionPairFormatNotSupported": {

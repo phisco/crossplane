@@ -26,11 +26,9 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
-	"strconv"
 	"strings"
 
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/utils/pointer"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
@@ -67,7 +65,6 @@ const (
 	errStringTransformTypeRegexpNoMatch = "regexp %q had no matches for group %d"
 	errStringConvertTypeFailed          = "type %s is not supported for string convert"
 
-	errConvertFormatNotSupported     = "unsupported convert format %s"
 	errConvertFormatPairNotSupported = "conversion from %s to %s is not supported with format %s"
 
 	errDecodeString = "string is not valid base64"
@@ -230,7 +227,7 @@ func ResolveString(t v1.StringTransform, input any) (string, error) {
 		if t.Convert == nil {
 			return "", errors.Errorf(errStringTransformTypeConvert, string(t.Type))
 		}
-		return stringConvertTransform(input, t.Convert)
+		return stringConvertTransform(t.Convert, input)
 	case v1.StringTransformTypeTrimPrefix, v1.StringTransformTypeTrimSuffix:
 		if t.Trim == nil {
 			return "", errors.Errorf(errStringTransformTypeTrim, string(t.Type))
@@ -248,7 +245,7 @@ func ResolveString(t v1.StringTransform, input any) (string, error) {
 
 // TODO(negz): Flip args.
 
-func stringConvertTransform(input any, t *v1.StringConversionType) (string, error) {
+func stringConvertTransform(t *v1.StringConversionType, input any) (string, error) {
 	str := fmt.Sprintf("%v", input)
 	switch *t {
 	case v1.StringConversionTypeToUpper:
@@ -314,109 +311,16 @@ func stringRegexpTransform(input any, r v1.StringTransformRegexp) (string, error
 	return groups[g], nil
 }
 
-type conversionPair struct {
-	from   v1.ConvertTransformType
-	to     v1.ConvertTransformType
-	format v1.ConvertTransformFormat
-}
-
-// TODO(phisco) implement and move as method of ConvertTransfom
-// func IsValidConversion(from, to v1.ConvertTransformType, format v1.ConvertTransformFormat) bool {
-// 	if from == to {
-// 		return true
-// 	}
-// 	// string, int64, none
-// 	// string, bool, none
-// 	// string, float64, none
-// 	// string, float64, quantity
-// 	// int64, string, none
-// 	// int64, bool, none
-// 	// int64, float64, none
-// 	// bool, string, none
-// 	// bool, int64, none
-// 	// bool, float64, none
-// 	// float64, string, none
-// 	// float64, int64, none
-// 	// float64, bool, none
-//
-// 	return false
-// }
-
-// The unparam linter is complaining that these functions always return a nil
-// error, but we need this to be the case given some other functions in the map
-// may return an error.
-var conversions = map[conversionPair]func(any) (any, error){
-	{from: v1.ConvertTransformTypeString, to: v1.ConvertTransformTypeInt64, format: v1.ConvertTransformFormatNone}: func(i any) (any, error) {
-		return strconv.ParseInt(i.(string), 10, 64)
-	},
-	{from: v1.ConvertTransformTypeString, to: v1.ConvertTransformTypeBool, format: v1.ConvertTransformFormatNone}: func(i any) (any, error) {
-		return strconv.ParseBool(i.(string))
-	},
-	{from: v1.ConvertTransformTypeString, to: v1.ConvertTransformTypeFloat64, format: v1.ConvertTransformFormatNone}: func(i any) (any, error) {
-		return strconv.ParseFloat(i.(string), 64)
-	},
-	{from: v1.ConvertTransformTypeString, to: v1.ConvertTransformTypeFloat64, format: v1.ConvertTransformFormatQuantity}: func(i any) (any, error) {
-		q, err := resource.ParseQuantity(i.(string))
-		if err != nil {
-			return nil, err
-		}
-		return q.AsApproximateFloat64(), nil
-	},
-
-	{from: v1.ConvertTransformTypeInt64, to: v1.ConvertTransformTypeString, format: v1.ConvertTransformFormatNone}: func(i any) (any, error) { //nolint:unparam // See note above.
-		return strconv.FormatInt(i.(int64), 10), nil
-	},
-	{from: v1.ConvertTransformTypeInt64, to: v1.ConvertTransformTypeBool, format: v1.ConvertTransformFormatNone}: func(i any) (any, error) { //nolint:unparam // See note above.
-		return i.(int64) == 1, nil
-	},
-	{from: v1.ConvertTransformTypeInt64, to: v1.ConvertTransformTypeFloat64, format: v1.ConvertTransformFormatNone}: func(i any) (any, error) { //nolint:unparam // See note above.
-		return float64(i.(int64)), nil
-	},
-
-	{from: v1.ConvertTransformTypeBool, to: v1.ConvertTransformTypeString, format: v1.ConvertTransformFormatNone}: func(i any) (any, error) { //nolint:unparam // See note above.
-		return strconv.FormatBool(i.(bool)), nil
-	},
-	{from: v1.ConvertTransformTypeBool, to: v1.ConvertTransformTypeInt64, format: v1.ConvertTransformFormatNone}: func(i any) (any, error) { //nolint:unparam // See note above.
-		if i.(bool) {
-			return int64(1), nil
-		}
-		return int64(0), nil
-	},
-	{from: v1.ConvertTransformTypeBool, to: v1.ConvertTransformTypeFloat64, format: v1.ConvertTransformFormatNone}: func(i any) (any, error) { //nolint:unparam // See note above.
-		if i.(bool) {
-			return float64(1), nil
-		}
-		return float64(0), nil
-	},
-
-	{from: v1.ConvertTransformTypeFloat64, to: v1.ConvertTransformTypeString, format: v1.ConvertTransformFormatNone}: func(i any) (any, error) { //nolint:unparam // See note above.
-		return strconv.FormatFloat(i.(float64), 'f', -1, 64), nil
-	},
-	{from: v1.ConvertTransformTypeFloat64, to: v1.ConvertTransformTypeInt64, format: v1.ConvertTransformFormatNone}: func(i any) (any, error) { //nolint:unparam // See note above.
-		return int64(i.(float64)), nil
-	},
-	{from: v1.ConvertTransformTypeFloat64, to: v1.ConvertTransformTypeBool, format: v1.ConvertTransformFormatNone}: func(i any) (any, error) { //nolint:unparam // See note above.
-		return i.(float64) == float64(1), nil
-	},
-}
-
-// ResolveConvert resolves a Convert transform.
+// ResolveConvert resolves a Convert transform by looking up the appropriate
+// conversion function for the given input type and invoking it.
 func ResolveConvert(t v1.ConvertTransform, input any) (any, error) {
-	from := reflect.TypeOf(input).Kind().String()
-	if from == string(v1.ConvertTransformTypeInt) {
-		from = string(v1.ConvertTransformTypeInt64)
+	from := v1.ConvertTransformType(reflect.TypeOf(input).Kind().String())
+	if !from.IsValid() {
+		return nil, errors.Errorf("invalid input type %T", input)
 	}
-	to := t.ToType
-	if to == v1.ConvertTransformTypeInt {
-		to = v1.ConvertTransformTypeInt64
-	}
-	if string(to) == from {
-		return input, nil
-	}
-	format := t.GetFormat()
-	f, ok := conversions[conversionPair{from: v1.ConvertTransformType(from), to: to, format: format}]
-	if !ok {
-		return nil, errors.Errorf(errConvertFormatPairNotSupported, reflect.TypeOf(input).Kind().String(), t.ToType, string(format))
+	f, err := t.GetConversion(from)
+	if err != nil {
+		return nil, err
 	}
 	return f(input)
 }
