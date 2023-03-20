@@ -90,7 +90,7 @@ func ValidateComposition(
 	}
 
 	// Return if using unsupported/non-deterministic features, e.g. Transforms...
-	if err := comp.IsUsingFunctions(); err != nil {
+	if len(comp.Spec.Functions) > 0 {
 		// TODO(lsviben) we should send out a warning that we are not rendering and validating the whole Composition
 		return nil
 	}
@@ -120,30 +120,29 @@ func ValidateComposition(
 	}
 
 	// Render resources => reuse existing logic
-	r := composite.NewReconcilerFromClient(
+	if _, err := composite.NewReconcilerFromClient(
 		c,
 		resource.CompositeKind(schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
 			comp.Spec.CompositeTypeRef.Kind)),
 		composite.WithCompositionValidator(func(in *v1.Composition) field.ErrorList {
 			return nil
 		}),
-		// TODO(phisco): handle logger
-	)
-	if _, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: compositeResourceValidationName, Namespace: compositeResourceValidationNamespace}}); err != nil {
+		// TODO(phisco): handle additional options, e.g. logger
+	).Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: compositeResourceValidationName, Namespace: compositeResourceValidationNamespace}}); err != nil {
 		errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot render resources")))
 		return errs
 	}
 
 	// Validate resources given their CRDs
 	var validationWarns []error
-	// TODO (lsviben) we are currently validating only things we have schema for, instead of everything created by the reconciler
+	// TODO (lsviben): we are currently validating only things we have schema for, instead of everything created by the reconciler
+	// Could be handled by adding a method to the MappedClient to get all objects
 	for gvk, crd := range gvkToCRDs {
 		if gvk == compositeResGVK {
 			continue
 		}
 		composedRes := &unstructured.UnstructuredList{}
 		composedRes.SetGroupVersionKind(gvk)
-		// TODO(phisco) add a method to the MappedClient to get everything created
 		err := c.List(ctx, composedRes, client.MatchingLabels{xcrd.LabelKeyNamePrefixForComposed: compositeResourceValidationName})
 		if err != nil {
 			errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot list composed resources")))

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package composition
+package composite
 
 import (
 	"encoding/json"
@@ -1246,7 +1246,7 @@ func TestComposedTemplates(t *testing.T) {
 				},
 			},
 			want: want{
-				err: errors.Errorf(ErrFmtUndefinedPatchSet, "patch-set-1"),
+				err: errors.Errorf(errFmtUndefinedPatchSet, "patch-set-1"),
 			},
 		},
 		"DefinedPatchSets": {

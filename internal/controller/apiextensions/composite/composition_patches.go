@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package composition
+package composite
 
 import (
 	"fmt"
@@ -31,10 +31,9 @@ import (
 )
 
 const (
-	// ErrFmtUndefinedPatchSet is the error format for undefined PatchSet.
-	ErrFmtUndefinedPatchSet = "cannot find PatchSet by name %s"
+	errCombineRequiresVariables = "combine patch types require at least one variable"
 
-	errCombineRequiresVariables       = "combine patch types require at least one variable"
+	errFmtUndefinedPatchSet           = "cannot find PatchSet by name %s"
 	errFmtInvalidPatchType            = "patch type %s is unsupported"
 	errFmtCombineStrategyNotSupported = "combine strategy %s is not supported"
 	errFmtCombineConfigMissing        = "given combine strategy %s requires configuration"
@@ -328,7 +327,7 @@ func ComposedTemplates(cs v1.CompositionSpec) ([]v1.ComposedTemplate, error) {
 			}
 			ps, ok := pn[*p.PatchSetName]
 			if !ok {
-				return nil, errors.Errorf(ErrFmtUndefinedPatchSet, *p.PatchSetName)
+				return nil, errors.Errorf(errFmtUndefinedPatchSet, *p.PatchSetName)
 			}
 			po = append(po, ps...)
 		}

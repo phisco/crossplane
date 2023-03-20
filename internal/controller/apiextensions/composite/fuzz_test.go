@@ -20,8 +20,6 @@ import (
 	"errors"
 	"testing"
 
-	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
-
 	fuzz "github.com/AdaLogics/go-fuzz-headers"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -94,7 +92,7 @@ func FuzzPatchApply(f *testing.F) {
 		}
 		addType(p, typeIndex)
 
-		_ = xpcomposition.Apply(*p, cp, cd)
+		_ = Apply(*p, cp, cd)
 	})
 }
 
@@ -154,6 +152,6 @@ func FuzzTransform(f *testing.F) {
 			return
 		}
 
-		_, _ = xpcomposition.Resolve(*t, i)
+		_, _ = Resolve(*t, i)
 	})
 }

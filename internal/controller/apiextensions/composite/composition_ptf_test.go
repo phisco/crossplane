@@ -22,8 +22,6 @@ import (
 	"sync"
 	"testing"
 
-	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
-
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/grpc"
@@ -866,7 +864,7 @@ func TestPatchAndTransform(t *testing.T) {
 				},
 			},
 			want: want{
-				err: errors.Wrap(errors.Errorf(xpcomposition.ErrFmtUndefinedPatchSet, "nonexistent-patchset"), errInline),
+				err: errors.Wrap(errors.Errorf(errFmtUndefinedPatchSet, "nonexistent-patchset"), errInline),
 			},
 		},
 		// TODO(negz): Test handling of ApplyEnvironmentPatch errors.

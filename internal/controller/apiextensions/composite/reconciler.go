@@ -318,8 +318,8 @@ type composition struct {
 	compositionValidatorFunc
 }
 
-func (c *composition) Validate(comp *v1.Composition) field.ErrorList {
-	return c.compositionValidatorFunc(comp)
+func (c *composition) Validate(comp *v1.Composition) error {
+	return c.compositionValidatorFunc(comp).ToAggregate()
 }
 
 type compositionValidatorFunc func(*v1.Composition) field.ErrorList
@@ -490,7 +490,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	}
 
 	if err := r.composition.Validate(comp); err != nil {
-		err := error(err.ToAggregate())
 		log.Debug(errValidate, "error", err)
 		err = errors.Wrap(err, errValidate)
 		r.record.Event(xr, event.Warning(reasonCompose, err))

@@ -19,6 +19,9 @@ package composition
 import (
 	"fmt"
 
+	"github.com/crossplane/crossplane/internal/controller/apiextensions/composite"
+	errors2 "github.com/crossplane/crossplane/pkg/validation/errors"
+
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -29,13 +32,12 @@ import (
 	schema2 "github.com/crossplane/crossplane/pkg/validation/schema"
 
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
-	"github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
 )
 
 // validatePatchesWithSchemas validates the patches of a composition against the resources schemas.
 func validatePatchesWithSchemas(comp *v1.Composition, gvkToCRD map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition) (errs field.ErrorList) {
 	// Let's first dereference patchSets
-	resources, err := composition.ComposedTemplates(comp.Spec)
+	resources, err := composite.ComposedTemplates(comp.Spec)
 	if err != nil {
 		errs = append(errs, field.Invalid(field.NewPath("spec", "resources"), comp.Spec.Resources, err.Error()))
 		return errs
@@ -110,10 +112,10 @@ func validatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): refactor
 			compositeCRD.Spec.Validation.OpenAPIV3Schema)
 	}
 	if validationErr != nil {
-		return v1.WrapFieldError(validationErr, field.NewPath("spec", "resources").Index(resourceNumber).Child("patches").Index(patchNumber))
+		return errors2.WrapFieldError(validationErr, field.NewPath("spec", "resources").Index(resourceNumber).Child("patches").Index(patchNumber))
 	}
 
-	return v1.WrapFieldError(
+	return errors2.WrapFieldError(
 		validateTransformsIOTypes(patch.Transforms, fromType, toType),
 		field.NewPath("spec", "resources").Index(resourceNumber).Child("patches").Index(patchNumber),
 	)
@@ -164,7 +166,7 @@ func ValidateCombineFromCompositePathPatch(
 		return "", "", field.Invalid(field.NewPath("combine", "strategy"), patch.Combine.Strategy, "combine strategy is not supported")
 	}
 
-	// TODO(lsviben) check if we could validate the patch combine format
+	// TODO(lsviben): check if we could validate the patch combine format
 
 	return fromType, toType, nil
 }
@@ -280,7 +282,7 @@ func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fie
 		}
 		prop, exists := parent.Properties[segment.Field]
 		if !exists {
-			// TODO(phisco): handle x-kubernetes-preserve-unknown-fields
+			// TODO(phisco): handle other fields
 			if pointer.BoolDeref(parent.XPreserveUnknownFields, false) {
 				return nil, false, nil
 			}

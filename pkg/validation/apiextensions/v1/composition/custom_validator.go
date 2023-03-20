@@ -71,7 +71,7 @@ func (c *CustomValidator) SetupWithManager(mgr ctrl.Manager) error {
 
 // ValidateUpdate is a no-op for now.
 func (c *CustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) error {
-	// TODO(phisco): we should validate the update as well, but we need to make sure that we don't break existing Compositions
+	// TODO(phisco): check if there is anything to validate in the diff
 	return c.ValidateCreate(ctx, newObj)
 }
 

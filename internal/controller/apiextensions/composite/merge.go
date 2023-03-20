@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package composition
+package composite
 
 import (
 	"context"
@@ -70,9 +70,9 @@ func withMergeOptions(fieldPath string, mergeOptions *xpv1.MergeOptions) resourc
 	}
 }
 
-// MergeOptions returns merge options for an unfiltered patch specification
+// mergeOptions returns merge options for an unfiltered patch specification
 // as an array of apply options.
-func MergeOptions(pas []v1.Patch) []resource.ApplyOption {
+func mergeOptions(pas []v1.Patch) []resource.ApplyOption {
 	opts := make([]resource.ApplyOption, 0, len(pas))
 	for _, p := range pas {
 		if p.Policy == nil || p.ToFieldPath == nil {

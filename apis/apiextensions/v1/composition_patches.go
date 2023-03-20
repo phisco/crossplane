@@ -19,6 +19,8 @@ package v1
 import (
 	"fmt"
 
+	"github.com/crossplane/crossplane/pkg/validation/errors"
+
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
@@ -38,7 +40,8 @@ const (
 	PatchTypeCombineFromComposite     PatchType = "CombineFromComposite"
 	PatchTypeCombineToComposite       PatchType = "CombineToComposite"
 	PatchTypeCombineToEnvironment     PatchType = "CombineToEnvironment"
-	PatchTypeDefault                            = PatchTypeFromCompositeFieldPath
+
+	PatchTypeDefault = PatchTypeFromCompositeFieldPath
 )
 
 // A FromFieldPathPolicy determines how to patch from a field path.
@@ -121,6 +124,14 @@ func (p *Patch) GetToFieldPath() string {
 	return *p.ToFieldPath
 }
 
+// GetType returns the patch type. If the type is not set, it returns the default type.
+func (p *Patch) GetType() PatchType {
+	if p.Type == "" {
+		return PatchTypeDefault
+	}
+	return p.Type
+}
+
 // Validate the Patch object.
 func (p *Patch) Validate() *field.Error {
 	switch p.GetType() {
@@ -143,19 +154,11 @@ func (p *Patch) Validate() *field.Error {
 	}
 	for i, transform := range p.Transforms {
 		if err := transform.Validate(); err != nil {
-			return WrapFieldError(err, field.NewPath("transforms").Index(i))
+			return errors.WrapFieldError(err, field.NewPath("transforms").Index(i))
 		}
 	}
 
 	return nil
-}
-
-// GetType returns the patch type. If the type is not set, it returns the default type.
-func (p *Patch) GetType() PatchType {
-	if p.Type == "" {
-		return PatchTypeDefault
-	}
-	return p.Type
 }
 
 // A CombineVariable defines the source of a value that is combined with

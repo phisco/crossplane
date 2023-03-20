@@ -16,7 +16,7 @@ func withReadinessChecks(index int, rcs ...v1.ReadinessCheck) compositionBuilder
 	}
 }
 
-// TODO(lsviben) check the errors - just paths are enough
+// TODO(lsviben): check the errors - just paths are enough
 func TestValidateReadinessCheck(t *testing.T) {
 	type args struct {
 		comp     *v1.Composition

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package composition
+package composite
 
 import (
 	"crypto/sha1" //nolint:gosec // Not used for secure hashing
@@ -243,8 +243,6 @@ func ResolveString(t v1.StringTransform, input any) (string, error) {
 	}
 }
 
-// TODO(negz): Flip args.
-
 func stringConvertTransform(t *v1.StringConversionType, input any) (string, error) {
 	str := fmt.Sprintf("%v", input)
 	switch *t {
@@ -318,7 +316,7 @@ func ResolveConvert(t v1.ConvertTransform, input any) (any, error) {
 	if !from.IsValid() {
 		return nil, errors.Errorf("invalid input type %T", input)
 	}
-	f, err := t.GetConversion(from)
+	f, err := t.GetConversionFunc(from)
 	if err != nil {
 		return nil, err
 	}

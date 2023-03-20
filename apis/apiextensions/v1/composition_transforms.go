@@ -20,6 +20,8 @@ import (
 	"encoding/json"
 	"strconv"
 
+	errors2 "github.com/crossplane/crossplane/pkg/validation/errors"
+
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -99,7 +101,7 @@ func (t *Transform) Validate() *field.Error {
 			return field.Required(field.NewPath("convert"), "given transform type convert requires configuration")
 		}
 		if err := t.Convert.Validate(); err != nil {
-			return WrapFieldError(err, field.NewPath("convert"))
+			return errors2.WrapFieldError(err, field.NewPath("convert"))
 		}
 	default:
 		return field.Invalid(field.NewPath("type"), t.Type, "unknown transform type")
@@ -131,7 +133,7 @@ func (t *Transform) IsValidInput(fromType ConvertTransformType) error {
 			return errors.Errorf("string transform can only be used with string input types, got %s", fromType)
 		}
 	case TransformTypeConvert:
-		if _, err := t.Convert.GetConversion(fromType); err != nil {
+		if _, err := t.Convert.GetConversionFunc(fromType); err != nil {
 			return err
 		}
 	default:
@@ -146,9 +148,9 @@ type conversionPair struct {
 	format ConvertTransformFormat
 }
 
-// GetConversion returns the conversion function for the given input and output types, or an error if no conversion is
+// GetConversionFunc returns the conversion function for the given input and output types, or an error if no conversion is
 // supported. Will return a no-op conversion if the input and output types are the same.
-func (t *ConvertTransform) GetConversion(from ConvertTransformType) (func(any) (any, error), error) {
+func (t *ConvertTransform) GetConversionFunc(from ConvertTransformType) (func(any) (any, error), error) {
 	originalFrom := from
 	to := t.ToType
 	if to == ConvertTransformTypeInt {
@@ -510,7 +512,7 @@ func (t *ConvertTransform) Validate() *field.Error {
 	if t == nil {
 		return nil
 	}
-	if t.GetFormat().IsValid() {
+	if !t.GetFormat().IsValid() {
 		return field.Invalid(field.NewPath("format"), t.Format, "invalid format")
 	}
 	if !t.ToType.IsValid() {

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package composition
+package composite
 
 import (
 	"testing"
@@ -245,7 +245,7 @@ func TestMergePath(t *testing.T) {
 			},
 			want: want{
 				err: errors.Wrap(errors.New(
-					"ToUnstructured requires a non-nil pointer to an object, got composition.strObject"),
+					"ToUnstructured requires a non-nil pointer to an object, got composite.strObject"),
 					"cannot convert object to unstructured data"),
 			},
 		},
@@ -258,7 +258,7 @@ func TestMergePath(t *testing.T) {
 			},
 			want: want{
 				err: errors.Wrap(errors.New(
-					"ToUnstructured requires a non-nil pointer to an object, got composition.strObject"),
+					"ToUnstructured requires a non-nil pointer to an object, got composite.strObject"),
 					"cannot convert object to unstructured data"),
 			},
 		},
@@ -336,7 +336,7 @@ func TestMergeReplace(t *testing.T) {
 			},
 			want: want{
 				err: errors.Wrap(errors.New(
-					"ToUnstructured requires a non-nil pointer to an object, got composition.strObject"),
+					"ToUnstructured requires a non-nil pointer to an object, got composite.strObject"),
 					"cannot convert object to unstructured data"),
 			},
 		},
@@ -417,8 +417,8 @@ func TestMergeOptions(t *testing.T) {
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			if got := MergeOptions(tc.args.patches); len(got) != tc.wantLength {
-				t.Errorf("MergeOptions(...): want length %v, got length %v", tc.wantLength, len(got))
+			if got := mergeOptions(tc.args.patches); len(got) != tc.wantLength {
+				t.Errorf("mergeOptions(...): want length %v, got length %v", tc.wantLength, len(got))
 			}
 		})
 	}

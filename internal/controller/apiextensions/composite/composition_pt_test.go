@@ -20,8 +20,6 @@ import (
 	"context"
 	"testing"
 
-	xpcomposition "github.com/crossplane/crossplane/internal/controller/apiextensions/composition"
-
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	corev1 "k8s.io/api/core/v1"
@@ -89,7 +87,7 @@ func TestPTCompose(t *testing.T) {
 				},
 			},
 			want: want{
-				err: errors.Wrap(errors.Errorf(xpcomposition.ErrFmtUndefinedPatchSet, "nonexistent-patchset"), errInline),
+				err: errors.Wrap(errors.Errorf(errFmtUndefinedPatchSet, "nonexistent-patchset"), errInline),
 			},
 		},
 		"AssociateTemplatesError": {

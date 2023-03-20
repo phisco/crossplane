@@ -70,11 +70,3 @@ func (in *Composition) GetValidationMode() (CompositionValidationMode, error) {
 	}
 	return "", errors.Errorf("invalid composition validation mode: %s", mode)
 }
-
-// IsUsingFunctions returns true if the composition is using any non-deterministic transformation.
-func (in *Composition) IsUsingFunctions() error {
-	if len(in.Spec.Functions) > 0 {
-		return errors.New("composition is using functions")
-	}
-	return nil
-}
