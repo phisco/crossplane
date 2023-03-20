@@ -105,6 +105,22 @@ type Patch struct {
 	Policy *PatchPolicy `json:"policy,omitempty"`
 }
 
+// GetFromFieldPath returns the FromFieldPath for this Patch, or an empty string if it is nil.
+func (p *Patch) GetFromFieldPath() string {
+	if p.FromFieldPath == nil {
+		return ""
+	}
+	return *p.FromFieldPath
+}
+
+// GetToFieldPath returns the ToFieldPath for this Patch, or an empty string if it is nil.
+func (p *Patch) GetToFieldPath() string {
+	if p.ToFieldPath == nil {
+		return ""
+	}
+	return *p.ToFieldPath
+}
+
 // Validate the Patch object.
 func (p *Patch) Validate() *field.Error {
 	switch p.GetType() {
@@ -120,6 +136,10 @@ func (p *Patch) Validate() *field.Error {
 		if p.Combine == nil {
 			return field.Required(field.NewPath("combine"), fmt.Sprintf("combine must be set for patch type %s", p.Type))
 		}
+		if p.ToFieldPath == nil {
+			return field.Required(field.NewPath("toFieldPath"), fmt.Sprintf("toFieldPath must be set for patch type %s", p.Type))
+		}
+
 	}
 	for i, transform := range p.Transforms {
 		if err := transform.Validate(); err != nil {

@@ -96,9 +96,8 @@ func (t *Transform) Validate() *field.Error {
 		if t.Convert == nil {
 			return field.Required(field.NewPath("convert"), "given transform type convert requires configuration")
 		}
-		format := t.Convert.GetFormat()
-		if !format.IsValid() {
-			return field.Invalid(field.NewPath("convert", "format"), format, "unknown format")
+		if err := t.Convert.Validate(); err != nil {
+			return WrapFieldError(err, field.NewPath("convert"))
 		}
 	default:
 		return field.Invalid(field.NewPath("type"), t.Type, "unknown transform type")
@@ -333,6 +332,16 @@ const (
 	ConvertTransformTypeFloat64 ConvertTransformType = "float64"
 )
 
+// IsValid checks if the given ConvertTransformType is valid.
+func (c ConvertTransformType) IsValid() bool {
+	switch c {
+	case ConvertTransformTypeString, ConvertTransformTypeBool, ConvertTransformTypeInt, ConvertTransformTypeInt64, ConvertTransformTypeFloat64:
+		return true
+	default:
+		return false
+	}
+}
+
 // ToKnownJSONType returns the matching JSON type for the given ConvertTransformType.
 func (c ConvertTransformType) ToKnownJSONType() schema.KnownJSONType {
 	switch c {
@@ -402,4 +411,18 @@ type ConvertTransform struct {
 	// +kubebuilder:validation:Enum=none;quantity
 	// +kubebuilder:validation:Default=none
 	Format *ConvertTransformFormat `json:"format,omitempty"`
+}
+
+// Validate returns an error if the ConvertTransform is invalid.
+func (t *ConvertTransform) Validate() *field.Error {
+	if t == nil {
+		return nil
+	}
+	if t.GetFormat().IsValid() {
+		return field.Invalid(field.NewPath("format"), t.Format, "invalid format")
+	}
+	if !t.ToType.IsValid() {
+		return field.Invalid(field.NewPath("toType"), t.ToType, "invalid type")
+	}
+	return nil
 }

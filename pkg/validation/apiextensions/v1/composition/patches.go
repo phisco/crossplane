@@ -110,7 +110,7 @@ func validatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): refactor
 			compositeCRD.Spec.Validation.OpenAPIV3Schema)
 	}
 	if validationErr != nil {
-		return field.Invalid(field.NewPath(validationErr.Field, "spec", "resources").Index(resourceNumber).Child("patches").Index(patchNumber), patch, validationErr.Error())
+		return v1.WrapFieldError(validationErr, field.NewPath("spec", "resources").Index(resourceNumber).Child("patches").Index(patchNumber))
 	}
 
 	return v1.WrapFieldError(
@@ -127,32 +127,31 @@ func ValidateCombineFromCompositePathPatch(
 	from *apiextensions.JSONSchemaProps,
 	to *apiextensions.JSONSchemaProps,
 ) (fromType, toType schema2.KnownJSONType, err *field.Error) {
-	fromRequired := true
-	for _, variable := range patch.Combine.Variables {
-		fromFieldPath := variable.FromFieldPath
-		_, required, err := validateFieldPath(from, fromFieldPath)
-		if err != nil {
-			return "", "", field.Invalid(field.NewPath("fromFieldPath"), fromFieldPath, err.Error())
-		}
-		fromRequired = fromRequired && required
-	}
-
-	if patch.ToFieldPath == nil {
-		return "", "", field.Required(field.NewPath("toFieldPath"), "ToFieldPath is required by type Combine")
-	}
-
-	toFieldPath := safeDeref(patch.ToFieldPath)
+	toFieldPath := patch.GetToFieldPath()
 	toType, toRequired, toFieldPathErr := validateFieldPath(to, toFieldPath)
 	if toFieldPathErr != nil {
 		return "", "", field.Invalid(field.NewPath("toFieldPath"), toFieldPath, toFieldPathErr.Error())
 	}
+	errs := field.ErrorList{}
+	for _, variable := range patch.Combine.Variables {
+		fromFieldPath := variable.FromFieldPath
+		_, required, err := validateFieldPath(from, fromFieldPath)
+		if err != nil {
+			errs = append(errs, field.Invalid(field.NewPath("fromFieldPath"), fromFieldPath, err.Error()))
+			continue
+		}
+		if toRequired && !required {
+			errs = append(errs, field.Invalid(
+				field.NewPath("combine"),
+				patch.Combine.Variables,
+				fmt.Sprintf("fromFieldPath (%v) is not required but toFieldPath (%s) is, this could lead to unexpected runtime errors", patch.Combine.Variables, toFieldPath),
+			))
+			continue
+		}
+	}
 
-	if toRequired && !fromRequired {
-		return "", "", field.Invalid(
-			field.NewPath("combine"),
-			patch.Combine.Variables,
-			fmt.Sprintf("from field paths (%v) are not required but to field path is (%s)", patch.Combine.Variables, toFieldPath),
-		)
+	if len(errs) > 0 {
+		return "", "", field.Invalid(field.NewPath("combine"), patch.Combine.Variables, errs.ToAggregate().Error())
 	}
 
 	switch patch.Combine.Strategy {
@@ -172,11 +171,8 @@ func ValidateCombineFromCompositePathPatch(
 
 // ValidateFromCompositeFieldPathPatch validates a patch of type FromCompositeFieldPath.
 func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions.JSONSchemaProps) (fromType, toType schema2.KnownJSONType, res *field.Error) {
-	fromFieldPath := safeDeref(patch.FromFieldPath)
-	toFieldPath := safeDeref(patch.ToFieldPath)
-	if toFieldPath == "" {
-		toFieldPath = fromFieldPath
-	}
+	fromFieldPath := patch.GetFromFieldPath()
+	toFieldPath := patch.GetToFieldPath()
 	fromType, fromRequired, err := validateFieldPath(from, fromFieldPath)
 	if err != nil {
 		return "", "", field.Invalid(field.NewPath("fromFieldPath"), fromFieldPath, err.Error())
@@ -187,7 +183,7 @@ func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions
 	}
 	if toRequired && !fromRequired {
 		return "", "", field.Invalid(field.NewPath("fromFieldPath"), fromFieldPath, fmt.Sprintf(
-			"from field path is not required but to field path is (%s)",
+			"fromFieldPath is optional, but toFieldPath '%s' is required according to their schemas",
 			toFieldPath,
 		))
 	}
@@ -221,19 +217,13 @@ func validateTransformsIOTypes(transforms []v1.Transform, fromType, toType schem
 	// integer is a subset of number per JSON specification:
 	// https://datatracker.ietf.org/doc/html/draft-zyp-json-schema-04#section-3.5
 	if !transformedToJSONType.IsEquivalent(toType) {
-		return field.Invalid(field.NewPath("transforms"), transforms, fmt.Sprintf("transformed output type and to field path have different types (%s != %s)", transformedToType, toType))
+		if len(transforms) == 0 {
+			return field.Required(field.NewPath("transforms"), fmt.Sprintf("the fromFieldPath does not have a type compatible with the fromFieldPath according to their schemas and no transforms were provided: %s != %s", transformedToType, toType))
+		}
+		return field.Invalid(field.NewPath("transforms"), transforms, fmt.Sprintf("the provided transforms do not output a type compatible with the toFieldPath according to the schema: %s != %s", transformedToType, toType))
 	}
 
 	return nil
-}
-
-// TODO(phisco): remove
-func safeDeref[T any](ptr *T) T {
-	var zero T
-	if ptr == nil {
-		return zero
-	}
-	return *ptr
 }
 
 func validateFieldPath(schema *apiextensions.JSONSchemaProps, fieldPath string) (fieldType schema2.KnownJSONType, required bool, err error) {
@@ -286,7 +276,7 @@ func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fie
 			propType = string(schema2.ObjectKnownJSONType)
 		}
 		if propType != string(schema2.ObjectKnownJSONType) {
-			return nil, false, errors.Errorf("trying to access field of not an object: %v", propType)
+			return nil, false, errors.Errorf("trying to access a field '%s' of object, but schema says parent is of type: '%v'", segment.Field, propType)
 		}
 		prop, exists := parent.Properties[segment.Field]
 		if !exists {
@@ -297,7 +287,7 @@ func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fie
 			if parent.AdditionalProperties != nil && parent.AdditionalProperties.Allows {
 				return parent.AdditionalProperties.Schema, false, nil
 			}
-			return nil, false, errors.Errorf("unable to find field: %s", segment.Field)
+			return nil, false, errors.Errorf("field '%s' is not valid according to the schema", segment.Field)
 		}
 		// TODO(lsviben): what about CEL?
 		var required bool
@@ -310,7 +300,7 @@ func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fie
 		return &prop, required, nil
 	case fieldpath.SegmentIndex:
 		if parent.Type != string(schema2.ArrayKnownJSONType) {
-			return nil, false, errors.Errorf("accessing by index a %s field", parent.Type)
+			return nil, false, errors.Errorf("trying to access a '%s' by index", parent.Type)
 		}
 		if parent.Items == nil {
 			return nil, false, errors.New("no items found in array")
