@@ -73,7 +73,8 @@ case "${1:-}" in
 
     [ "$2" ] && ns=$2 || ns="${DEFAULT_NAMESPACE}"
     echo "installing helm package into \"$ns\" namespace"
-    ${HELM3} install ${PROJECT_NAME} --namespace ${ns} --create-namespace ${projectdir}/cluster/charts/${PROJECT_NAME} --set image.pullPolicy=Never,imagePullSecrets='' ${HELM3_FLAGS}
+    ${KUBECTL} get namespace ${ns} 2>/dev/null||${KUBECTL} create namespace ${ns}
+    ${HELM3} install ${PROJECT_NAME} --namespace ${ns} ${projectdir}/cluster/charts/${PROJECT_NAME} --set image.pullPolicy=Never,imagePullSecrets='' ${HELM3_FLAGS}
     ;;
   helm-upgrade)
     echo "copying image for helm"
