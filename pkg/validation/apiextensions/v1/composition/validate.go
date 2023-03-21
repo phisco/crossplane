@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
@@ -112,7 +113,7 @@ func ValidateComposition(
 	}
 	c := validation.NewFakeClient(scheme)
 	// create all required resources
-	mockedObjects := []client.Object{compositeRes, comp}
+	mockedObjects := []client.Object{compositeRes, sanitizedComposition(comp)}
 	for _, obj := range mockedObjects {
 		err := c.Create(ctx, obj)
 		if err != nil {
@@ -213,4 +214,15 @@ func findSourceResourceIndex(resources []v1.ComposedTemplate, composed unstructu
 		}
 	}
 	return -1
+}
+
+func sanitizedComposition(comp *v1.Composition) *v1.Composition {
+	out := comp.DeepCopyObject().(*v1.Composition)
+	out.CreationTimestamp = metav1.Time{}
+	out.SetResourceVersion("")
+	out.SetUID("")
+	out.SetSelfLink("")
+	out.SetGeneration(0)
+	out.SetManagedFields(nil)
+	return out
 }
