@@ -20,14 +20,12 @@ import (
 	"encoding/json"
 	"strconv"
 
-	errors2 "github.com/crossplane/crossplane/pkg/validation/errors"
+	xperrors "github.com/crossplane/crossplane/pkg/validation/errors"
+	"github.com/crossplane/crossplane/pkg/validation/schema"
 
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-
 	"k8s.io/apimachinery/pkg/util/validation/field"
-
-	"github.com/crossplane/crossplane/pkg/validation/schema"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 )
@@ -101,7 +99,7 @@ func (t *Transform) Validate() *field.Error {
 			return field.Required(field.NewPath("convert"), "given transform type convert requires configuration")
 		}
 		if err := t.Convert.Validate(); err != nil {
-			return errors2.WrapFieldError(err, field.NewPath("convert"))
+			return xperrors.WrapFieldError(err, field.NewPath("convert"))
 		}
 	default:
 		return field.Invalid(field.NewPath("type"), t.Type, "unknown transform type")

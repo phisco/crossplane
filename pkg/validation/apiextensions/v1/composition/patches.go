@@ -19,8 +19,10 @@ package composition
 import (
 	"fmt"
 
+	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 	"github.com/crossplane/crossplane/internal/controller/apiextensions/composite"
-	errors2 "github.com/crossplane/crossplane/pkg/validation/errors"
+	xperrors "github.com/crossplane/crossplane/pkg/validation/errors"
+	xpschema "github.com/crossplane/crossplane/pkg/validation/schema"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -29,9 +31,6 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
-	schema2 "github.com/crossplane/crossplane/pkg/validation/schema"
-
-	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 )
 
 // validatePatchesWithSchemas validates the patches of a composition against the resources schemas.
@@ -86,7 +85,7 @@ func validatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): refactor
 	}
 
 	var validationErr *field.Error
-	var fromType, toType schema2.KnownJSONType
+	var fromType, toType xpschema.KnownJSONType
 	switch patch.GetType() { //nolint:exhaustive // TODO implement other patch types
 	case v1.PatchTypeFromCompositeFieldPath:
 		fromType, toType, validationErr = ValidateFromCompositeFieldPathPatch(
@@ -112,10 +111,10 @@ func validatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): refactor
 			compositeCRD.Spec.Validation.OpenAPIV3Schema)
 	}
 	if validationErr != nil {
-		return errors2.WrapFieldError(validationErr, field.NewPath("spec", "resources").Index(resourceNumber).Child("patches").Index(patchNumber))
+		return xperrors.WrapFieldError(validationErr, field.NewPath("spec", "resources").Index(resourceNumber).Child("patches").Index(patchNumber))
 	}
 
-	return errors2.WrapFieldError(
+	return xperrors.WrapFieldError(
 		validateTransformsIOTypes(patch.Transforms, fromType, toType),
 		field.NewPath("spec", "resources").Index(resourceNumber).Child("patches").Index(patchNumber),
 	)
@@ -128,7 +127,7 @@ func ValidateCombineFromCompositePathPatch(
 	patch v1.Patch,
 	from *apiextensions.JSONSchemaProps,
 	to *apiextensions.JSONSchemaProps,
-) (fromType, toType schema2.KnownJSONType, err *field.Error) {
+) (fromType, toType xpschema.KnownJSONType, err *field.Error) {
 	toFieldPath := patch.GetToFieldPath()
 	toType, toRequired, toFieldPathErr := validateFieldPath(to, toFieldPath)
 	if toFieldPathErr != nil {
@@ -161,7 +160,7 @@ func ValidateCombineFromCompositePathPatch(
 		if patch.Combine.String == nil {
 			return "", "", field.Required(field.NewPath("combine", "string"), "string combine strategy requires configuration")
 		}
-		fromType = schema2.StringKnownJSONType
+		fromType = xpschema.StringKnownJSONType
 	default:
 		return "", "", field.Invalid(field.NewPath("combine", "strategy"), patch.Combine.Strategy, "combine strategy is not supported")
 	}
@@ -172,7 +171,7 @@ func ValidateCombineFromCompositePathPatch(
 }
 
 // ValidateFromCompositeFieldPathPatch validates a patch of type FromCompositeFieldPath.
-func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions.JSONSchemaProps) (fromType, toType schema2.KnownJSONType, res *field.Error) {
+func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions.JSONSchemaProps) (fromType, toType xpschema.KnownJSONType, res *field.Error) {
 	fromFieldPath := patch.GetFromFieldPath()
 	toFieldPath := patch.GetToFieldPath()
 	fromType, fromRequired, err := validateFieldPath(from, fromFieldPath)
@@ -193,7 +192,7 @@ func ValidateFromCompositeFieldPathPatch(patch v1.Patch, from, to *apiextensions
 	return fromType, toType, nil
 }
 
-func validateTransformsIOTypes(transforms []v1.Transform, fromType, toType schema2.KnownJSONType) *field.Error {
+func validateTransformsIOTypes(transforms []v1.Transform, fromType, toType xpschema.KnownJSONType) *field.Error {
 	transformedToType, err := v1.FromKnownJSONType(fromType)
 	if err != nil {
 		return field.InternalError(field.NewPath("transforms"), err)
@@ -228,7 +227,7 @@ func validateTransformsIOTypes(transforms []v1.Transform, fromType, toType schem
 	return nil
 }
 
-func validateFieldPath(schema *apiextensions.JSONSchemaProps, fieldPath string) (fieldType schema2.KnownJSONType, required bool, err error) {
+func validateFieldPath(schema *apiextensions.JSONSchemaProps, fieldPath string) (fieldType xpschema.KnownJSONType, required bool, err error) {
 	if fieldPath == "" {
 		return "", false, nil
 	}
@@ -252,10 +251,10 @@ func validateFieldPath(schema *apiextensions.JSONSchemaProps, fieldPath string) 
 		}
 	}
 
-	if !schema2.IsKnownJSONType(current.Type) {
+	if !xpschema.IsKnownJSONType(current.Type) {
 		return "", false, fmt.Errorf("field path %q has an unsupported type %q", fieldPath, current.Type)
 	}
-	return schema2.KnownJSONType(current.Type), required, nil
+	return xpschema.KnownJSONType(current.Type), required, nil
 
 }
 
@@ -275,9 +274,9 @@ func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fie
 	case fieldpath.SegmentField:
 		propType := parent.Type
 		if propType == "" {
-			propType = string(schema2.ObjectKnownJSONType)
+			propType = string(xpschema.ObjectKnownJSONType)
 		}
-		if propType != string(schema2.ObjectKnownJSONType) {
+		if propType != string(xpschema.ObjectKnownJSONType) {
 			return nil, false, errors.Errorf("trying to access a field '%s' of object, but schema says parent is of type: '%v'", segment.Field, propType)
 		}
 		prop, exists := parent.Properties[segment.Field]
@@ -301,7 +300,7 @@ func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fie
 		}
 		return &prop, required, nil
 	case fieldpath.SegmentIndex:
-		if parent.Type != string(schema2.ArrayKnownJSONType) {
+		if parent.Type != string(xpschema.ArrayKnownJSONType) {
 			return nil, false, errors.Errorf("trying to access a '%s' by index", parent.Type)
 		}
 		if parent.Items == nil {

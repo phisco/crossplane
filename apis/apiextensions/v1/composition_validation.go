@@ -3,7 +3,7 @@ package v1
 import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
-	errors2 "github.com/crossplane/crossplane/pkg/validation/errors"
+	xperrors "github.com/crossplane/crossplane/pkg/validation/errors"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 )
@@ -25,7 +25,7 @@ func (c *Composition) Validate() (errs field.ErrorList) {
 func (c *Composition) validateFunctions() (errs field.ErrorList) {
 	for i, f := range c.Spec.Functions {
 		if err := f.Validate(); err != nil {
-			errs = append(errs, errors2.WrapFieldError(err, field.NewPath("spec", "functions").Index(i)))
+			errs = append(errs, xperrors.WrapFieldError(err, field.NewPath("spec", "functions").Index(i)))
 		}
 	}
 	return errs
@@ -39,7 +39,7 @@ func (c *Composition) validatePatchSets() (errs field.ErrorList) {
 				continue
 			}
 			if err := p.Validate(); err != nil {
-				errs = append(errs, errors2.WrapFieldError(err, field.NewPath("spec", "patchSets").Index(i).Child("patches").Index(j)))
+				errs = append(errs, xperrors.WrapFieldError(err, field.NewPath("spec", "patchSets").Index(i).Child("patches").Index(j)))
 			}
 		}
 	}
@@ -53,12 +53,12 @@ func (c *Composition) validateResources() (errs field.ErrorList) {
 	for i, res := range c.Spec.Resources {
 		for j, patch := range res.Patches {
 			if err := patch.Validate(); err != nil {
-				errs = append(errs, errors2.WrapFieldError(err, field.NewPath("spec", "resources").Index(i).Child("patches").Index(j)))
+				errs = append(errs, xperrors.WrapFieldError(err, field.NewPath("spec", "resources").Index(i).Child("patches").Index(j)))
 			}
 		}
 		for j, rd := range res.ReadinessChecks {
 			if err := rd.Validate(); err != nil {
-				errs = append(errs, errors2.WrapFieldError(err, field.NewPath("spec", "resources").Index(i).Child("patches").Index(j)))
+				errs = append(errs, xperrors.WrapFieldError(err, field.NewPath("spec", "resources").Index(i).Child("patches").Index(j)))
 			}
 		}
 	}
