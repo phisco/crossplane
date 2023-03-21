@@ -7,6 +7,8 @@ import (
 )
 
 var (
+	// hardcoded metadata schema as CRDs usually don't contain it, but we need the information to be able
+	// to validate patches from `metadata.uid` or similar fields
 	metadataSchema = apiextensions.JSONSchemaProps{
 		Type: string(schema.ObjectKnownJSONType),
 		AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{

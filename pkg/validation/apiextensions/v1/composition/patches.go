@@ -86,7 +86,8 @@ func validatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): refactor
 
 	var validationErr *field.Error
 	var fromType, toType xpschema.KnownJSONType
-	switch patch.GetType() { //nolint:exhaustive // TODO implement other patch types
+	// TODO(phisco): add test cases for patch types not covered to check we behave correctly, e.g. what if a patch from environment is setting a required field?
+	switch patch.GetType() { //nolint:exhaustive // TODO(phisco): implement other patch types
 	case v1.PatchTypeFromCompositeFieldPath:
 		fromType, toType, validationErr = ValidateFromCompositeFieldPathPatch(
 			patch,

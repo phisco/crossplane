@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	corev1 "k8s.io/api/core/v1"
@@ -92,6 +93,7 @@ func ValidateComposition(
 	}
 
 	// Return if using unsupported/non-deterministic features, e.g. Transforms...
+	// TODO(phisco): what about unsupported patch types? should we consider them non-deterministic as we do for Functions?
 	if len(comp.Spec.Functions) > 0 {
 		// TODO(lsviben) we should send out a warning that we are not rendering and validating the whole Composition
 		return nil

@@ -26,6 +26,7 @@ import (
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 )
 
+// TODO(phisco): move to validate actual paths of errors instead of wantErr being just a bool
 func TestValidateComposition(t *testing.T) {
 	type args struct {
 		comp      *v1.Composition

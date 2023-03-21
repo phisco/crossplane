@@ -31,6 +31,7 @@ import (
 )
 
 const (
+	errPatchSetType             = "a patch in a PatchSet cannot be of type PatchSet"
 	errCombineRequiresVariables = "combine patch types require at least one variable"
 
 	errFmtUndefinedPatchSet           = "cannot find PatchSet by name %s"
@@ -310,6 +311,11 @@ func CombineString(format string, vars []any) (any, error) {
 func ComposedTemplates(cs v1.CompositionSpec) ([]v1.ComposedTemplate, error) {
 	pn := make(map[string][]v1.Patch)
 	for _, s := range cs.PatchSets {
+		for _, p := range s.Patches {
+			if p.Type == v1.PatchTypePatchSet {
+				return nil, errors.New(errPatchSetType)
+			}
+		}
 		pn[s.Name] = s.Patches
 	}
 
@@ -322,7 +328,6 @@ func ComposedTemplates(cs v1.CompositionSpec) ([]v1.ComposedTemplate, error) {
 				continue
 			}
 			if p.PatchSetName == nil {
-				// Should never happen
 				return nil, errors.Errorf(errFmtRequiredField, "PatchSetName", p.Type)
 			}
 			ps, ok := pn[*p.PatchSetName]

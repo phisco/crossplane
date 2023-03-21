@@ -31,6 +31,7 @@ func withConnectionDetails(index int, cds ...v1.ConnectionDetail) compositionBui
 	}
 }
 
+// TODO(phisco): move to field.ErrorList instead of bool for wantErrs, as done for the resource name validation tests
 func TestValidateConnectionDetails(t *testing.T) {
 	type args struct {
 		comp     *v1.Composition
