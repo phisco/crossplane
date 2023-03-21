@@ -70,13 +70,13 @@ func (c *CustomValidator) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // ValidateUpdate is a no-op for now.
-func (c *CustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) error {
+func (c *CustomValidator) ValidateUpdate(ctx context.Context, _, newObj runtime.Object) error {
 	// TODO(phisco): check if there is anything to validate in the diff
 	return c.ValidateCreate(ctx, newObj)
 }
 
 // ValidateDelete is a no-op for now.
-func (c *CustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) error {
+func (c *CustomValidator) ValidateDelete(_ context.Context, _ runtime.Object) error {
 	return nil
 }
 

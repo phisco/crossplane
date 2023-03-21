@@ -21,17 +21,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apivalidation "k8s.io/apiextensions-apiserver/pkg/apiserver/validation"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/crossplane/crossplane/apis"
@@ -40,8 +39,6 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	xprcomposite "github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composite"
 	xprvalidation "github.com/crossplane/crossplane-runtime/pkg/validation"
-	"github.com/crossplane/crossplane/internal/xcrd"
-
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 	"github.com/crossplane/crossplane/internal/controller/apiextensions/composite"
 )
@@ -111,7 +108,8 @@ func ValidateComposition(
 	}
 	c := xprvalidation.NewMapClient(scheme)
 	// create all required resources
-	for _, obj := range []client.Object{compositeRes, comp} {
+	mockedObjects := []client.Object{compositeRes, comp}
+	for _, obj := range mockedObjects {
 		err := c.Create(ctx, obj)
 		if err != nil {
 			errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot create required mock resources")))
@@ -124,6 +122,7 @@ func ValidateComposition(
 		c,
 		resource.CompositeKind(schema.FromAPIVersionAndKind(comp.Spec.CompositeTypeRef.APIVersion,
 			comp.Spec.CompositeTypeRef.Kind)),
+		// We disable validation as it's already run as first thing in this function
 		composite.WithCompositionValidator(func(in *v1.Composition) field.ErrorList {
 			return nil
 		}),
@@ -137,26 +136,36 @@ func ValidateComposition(
 	var validationWarns []error
 	// TODO (lsviben): we are currently validating only things we have schema for, instead of everything created by the reconciler
 	// Could be handled by adding a method to the MappedClient to get all objects
-	for gvk, crd := range gvkToCRDs {
-		if gvk == compositeResGVK {
+	for gvk, m := range c.GetCache() {
+		crd, ok := gvkToCRDs[gvk]
+		if !ok {
+			// ignore all resources we mocked
+			var isMocked bool
+			for _, obj := range mockedObjects {
+				outGVK, err := apiutil.GVKForObject(obj, scheme)
+				if err != nil || outGVK != gvk {
+					continue
+				}
+				if _, ok := m[types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}]; ok {
+					isMocked = true
+					break
+				}
+			}
+			if !isMocked {
+				validationWarns = append(validationWarns, fmt.Errorf("cannot find CRD for resource %s", gvk))
+			}
 			continue
 		}
-		composedRes := &unstructured.UnstructuredList{}
-		composedRes.SetGroupVersionKind(gvk)
-		err := c.List(ctx, composedRes, client.MatchingLabels{xcrd.LabelKeyNamePrefixForComposed: compositeResourceValidationName})
+		vs, _, err := apivalidation.NewSchemaValidator(crd.Spec.Validation)
 		if err != nil {
-			errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot list composed resources")))
+			errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot create schema validator")))
 			return errs
 		}
-		for _, cd := range composedRes.Items {
-			vs, _, err := apivalidation.NewSchemaValidator(crd.Spec.Validation)
-			if err != nil {
-				errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot create schema validator")))
-				return errs
-			}
-			r := vs.Validate(cd.Object)
+		for _, cd := range m {
+
+			r := vs.Validate(cd)
 			if r.HasErrors() {
-				sourceResourceIndex := findSourceResourceIndex(comp.Spec.Resources, cd)
+				sourceResourceIndex := findSourceResourceIndex(comp.Spec.Resources, cd, gvk)
 				for _, err := range r.Errors {
 					cdString, marshalErr := json.Marshal(cd)
 					if marshalErr != nil {
@@ -185,7 +194,7 @@ func ValidateComposition(
 	}
 	if len(validationWarns) != 0 {
 		// TODO (lsviben) send the warnings back
-		fmt.Printf("there were some warnings while validating the rendered resources:\n%s", errors.Join(validationWarns...))
+		fmt.Printf("there were some warnings while validating the rendered resources:\n%s\n", errors.Join(validationWarns...))
 	}
 
 	return nil
@@ -201,10 +210,10 @@ func genCompositeResource(comp *v1.Composition) (*xprcomposite.Unstructured, sch
 	return compositeRes, compositeResGVK
 }
 
-func findSourceResourceIndex(resources []v1.ComposedTemplate, composed unstructured.Unstructured) int {
+func findSourceResourceIndex(resources []v1.ComposedTemplate, in client.Object, gvk schema.GroupVersionKind) int {
 	for i, r := range resources {
 		if obj, err := r.GetBaseObject(); err == nil {
-			if obj.GetObjectKind().GroupVersionKind() == composed.GetObjectKind().GroupVersionKind() && obj.GetName() == composite.GetCompositionResourceName(&composed) {
+			if obj.GetObjectKind().GroupVersionKind() == gvk && obj.GetName() == composite.GetCompositionResourceName(in) {
 				return i
 			}
 		}
