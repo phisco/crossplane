@@ -21,17 +21,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apivalidation "k8s.io/apiextensions-apiserver/pkg/apiserver/validation"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/crossplane/crossplane/internal/xcrd"
+	"github.com/crossplane/crossplane/pkg/validation"
 
 	"github.com/crossplane/crossplane/apis"
 
@@ -106,7 +110,7 @@ func ValidateComposition(
 		errs = append(errs, field.InternalError(field.NewPath("spec", "compositeTypeRef"), err))
 		return errs
 	}
-	c := xprvalidation.NewMapClient(scheme)
+	c := validation.NewFakeClient(scheme)
 	// create all required resources
 	mockedObjects := []client.Object{compositeRes, comp}
 	for _, obj := range mockedObjects {
@@ -136,36 +140,26 @@ func ValidateComposition(
 	var validationWarns []error
 	// TODO (lsviben): we are currently validating only things we have schema for, instead of everything created by the reconciler
 	// Could be handled by adding a method to the MappedClient to get all objects
-	for gvk, m := range c.GetCache() {
-		crd, ok := gvkToCRDs[gvk]
-		if !ok {
-			// ignore all resources we mocked
-			var isMocked bool
-			for _, obj := range mockedObjects {
-				outGVK, err := apiutil.GVKForObject(obj, scheme)
-				if err != nil || outGVK != gvk {
-					continue
-				}
-				if _, ok := m[types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}]; ok {
-					isMocked = true
-					break
-				}
-			}
-			if !isMocked {
-				validationWarns = append(validationWarns, fmt.Errorf("cannot find CRD for resource %s", gvk))
-			}
+	for gvk, crd := range gvkToCRDs {
+		if gvk == compositeResGVK {
 			continue
 		}
-		vs, _, err := apivalidation.NewSchemaValidator(crd.Spec.Validation)
+		composedRes := &unstructured.UnstructuredList{}
+		composedRes.SetGroupVersionKind(gvk)
+		err := c.List(ctx, composedRes, client.MatchingLabels{xcrd.LabelKeyNamePrefixForComposed: compositeResourceValidationName})
 		if err != nil {
-			errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot create schema validator")))
+			errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot list composed resources")))
 			return errs
 		}
-		for _, cd := range m {
-
-			r := vs.Validate(cd)
+		for _, cd := range composedRes.Items {
+			vs, _, err := apivalidation.NewSchemaValidator(crd.Spec.Validation)
+			if err != nil {
+				errs = append(errs, field.InternalError(field.NewPath("spec"), xperrors.Wrap(err, "cannot create schema validator")))
+				return errs
+			}
+			r := vs.Validate(cd.Object)
 			if r.HasErrors() {
-				sourceResourceIndex := findSourceResourceIndex(comp.Spec.Resources, cd, gvk)
+				sourceResourceIndex := findSourceResourceIndex(comp.Spec.Resources, cd)
 				for _, err := range r.Errors {
 					cdString, marshalErr := json.Marshal(cd)
 					if marshalErr != nil {
@@ -210,10 +204,10 @@ func genCompositeResource(comp *v1.Composition) (*xprcomposite.Unstructured, sch
 	return compositeRes, compositeResGVK
 }
 
-func findSourceResourceIndex(resources []v1.ComposedTemplate, in client.Object, gvk schema.GroupVersionKind) int {
+func findSourceResourceIndex(resources []v1.ComposedTemplate, composed unstructured.Unstructured) int {
 	for i, r := range resources {
 		if obj, err := r.GetBaseObject(); err == nil {
-			if obj.GetObjectKind().GroupVersionKind() == gvk && obj.GetName() == composite.GetCompositionResourceName(in) {
+			if obj.GetObjectKind().GroupVersionKind() == composed.GetObjectKind().GroupVersionKind() && obj.GetName() == composite.GetCompositionResourceName(&composed) {
 				return i
 			}
 		}

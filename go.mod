@@ -3,7 +3,7 @@ module github.com/crossplane/crossplane
 go 1.20
 
 //replace github.com/crossplane/crossplane-runtime => github.com/phisco/crossplane-runtime compositions-validation-rewrite
-replace github.com/crossplane/crossplane-runtime => github.com/phisco/crossplane-runtime v0.0.0-20230321113604-a506868e9875
+replace github.com/crossplane/crossplane-runtime => github.com/phisco/crossplane-runtime v0.0.0-20230321140752-94dd70070ec0
 
 //replace github.com/crossplane/crossplane-runtime => ../crossplane-runtime
 
