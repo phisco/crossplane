@@ -109,14 +109,13 @@ func (t *Transform) Validate() *field.Error {
 }
 
 // IsValidInput validates the supplied Transform type, taking into consideration also the input type.
-// It returns the
 //
 //nolint:gocyclo // This is a long but simple/same-y switch.
 func (t *Transform) IsValidInput(fromType ConvertTransformType) error {
 	switch t.Type {
 	case TransformTypeMath:
 		if fromType != ConvertTransformTypeInt && fromType != ConvertTransformTypeInt64 && fromType != ConvertTransformTypeFloat64 {
-			return errors.New("math transform can only be used with numeric types")
+			return errors.Errorf("math transform can only be used with numeric types, got %s", fromType)
 		}
 	case TransformTypeMap:
 		if fromType != ConvertTransformTypeString {
