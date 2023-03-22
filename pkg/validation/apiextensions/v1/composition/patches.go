@@ -161,7 +161,7 @@ func ValidateCombineFromCompositePathPatch(
 		if patch.Combine.String == nil {
 			return "", "", field.Required(field.NewPath("combine", "string"), "string combine strategy requires configuration")
 		}
-		fromType = xpschema.StringKnownJSONType
+		fromType = xpschema.KnownJSONTypeString
 	default:
 		return "", "", field.Invalid(field.NewPath("combine", "strategy"), patch.Combine.Strategy, "combine strategy is not supported")
 	}
@@ -275,9 +275,9 @@ func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fie
 	case fieldpath.SegmentField:
 		propType := parent.Type
 		if propType == "" {
-			propType = string(xpschema.ObjectKnownJSONType)
+			propType = string(xpschema.KnownJSONTypeObject)
 		}
-		if propType != string(xpschema.ObjectKnownJSONType) {
+		if propType != string(xpschema.KnownJSONTypeObject) {
 			return nil, false, errors.Errorf("trying to access a field '%s' of object, but schema says parent is of type: '%v'", segment.Field, propType)
 		}
 		prop, exists := parent.Properties[segment.Field]
@@ -301,7 +301,7 @@ func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fie
 		}
 		return &prop, required, nil
 	case fieldpath.SegmentIndex:
-		if parent.Type != string(xpschema.ArrayKnownJSONType) {
+		if parent.Type != string(xpschema.KnownJSONTypeArray) {
 			return nil, false, errors.Errorf("trying to access a '%s' by index", parent.Type)
 		}
 		if parent.Items == nil {

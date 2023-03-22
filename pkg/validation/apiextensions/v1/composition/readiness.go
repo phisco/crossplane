@@ -60,9 +60,9 @@ func validateReadinessCheckWithSchemas( //nolint:gocyclo // TODO(lsviben): refac
 			// NOTE: ComposedTemplate doesn't use pointer values for optional
 			// strings, so today the empty string and 0 are equivalent to "unset".
 			case v1.ReadinessCheckTypeMatchString:
-				matchType = xpschema.StringKnownJSONType
+				matchType = xpschema.KnownJSONTypeString
 			case v1.ReadinessCheckTypeMatchInteger:
-				matchType = xpschema.IntegerKnownJSONType
+				matchType = xpschema.KnownJSONTypeInteger
 			case v1.ReadinessCheckTypeNonEmpty:
 			}
 			fieldType, _, err := validateFieldPath(crd.Spec.Validation.OpenAPIV3Schema, r.FieldPath)

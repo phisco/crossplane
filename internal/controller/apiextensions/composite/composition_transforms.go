@@ -312,7 +312,7 @@ func stringRegexpTransform(input any, r v1.StringTransformRegexp) (string, error
 // ResolveConvert resolves a Convert transform by looking up the appropriate
 // conversion function for the given input type and invoking it.
 func ResolveConvert(t v1.ConvertTransform, input any) (any, error) {
-	from := v1.ConvertTransformType(reflect.TypeOf(input).Kind().String())
+	from := v1.TransformIOType(reflect.TypeOf(input).Kind().String())
 	if !from.IsValid() {
 		return nil, errors.Errorf("invalid input type %T", input)
 	}

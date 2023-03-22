@@ -23,7 +23,12 @@ func (c *Composition) Validate() (errs field.ErrorList) {
 }
 
 func (c *Composition) validateFunctions() (errs field.ErrorList) {
+	seen := map[string]bool{}
 	for i, f := range c.Spec.Functions {
+		if seen[f.Name] {
+			errs = append(errs, field.Duplicate(field.NewPath("spec", "functions").Index(i).Child("name"), f.Name))
+		}
+		seen[f.Name] = true
 		if err := f.Validate(); err != nil {
 			errs = append(errs, xperrors.WrapFieldError(err, field.NewPath("spec", "functions").Index(i)))
 		}
@@ -35,7 +40,7 @@ func (c *Composition) validatePatchSets() (errs field.ErrorList) {
 	for i, s := range c.Spec.PatchSets {
 		for j, p := range s.Patches {
 			if p.Type == PatchTypePatchSet {
-				errs = append(errs, field.Invalid(field.NewPath("spec", "patchSets").Index(i).Child("patches").Index(j).Child("type"), p, errors.New("cannot use patches within patches").Error()))
+				errs = append(errs, field.Invalid(field.NewPath("spec", "patchSets").Index(i).Child("patches").Index(j).Child("type"), p.Type, errors.New("cannot use patches within patches").Error()))
 				continue
 			}
 			if err := p.Validate(); err != nil {
@@ -58,7 +63,7 @@ func (c *Composition) validateResources() (errs field.ErrorList) {
 		}
 		for j, rd := range res.ReadinessChecks {
 			if err := rd.Validate(); err != nil {
-				errs = append(errs, xperrors.WrapFieldError(err, field.NewPath("spec", "resources").Index(i).Child("patches").Index(j)))
+				errs = append(errs, xperrors.WrapFieldError(err, field.NewPath("spec", "resources").Index(i).Child("readinessChecks").Index(j)))
 			}
 		}
 	}
@@ -85,12 +90,12 @@ func (c *Composition) validateResourceNames() (errs field.ErrorList) {
 		if name == "" {
 			// If the composition has any functions, it must have only named resources.
 			if len(c.Spec.Functions) != 0 {
-				errs = append(errs, field.Invalid(field.NewPath("spec", "resources").Index(resourceIndex).Child("name"), name, "cannot have anonymous resources when composition has functions"))
+				errs = append(errs, field.Required(field.NewPath("spec", "resources").Index(resourceIndex).Child("name"), "cannot have anonymous resources when composition has functions"))
 				continue
 			}
 			// If it's not the first resource, and all previous one were named, then this is an error.
 			if resourceIndex != 0 && len(seen) != 0 {
-				errs = append(errs, field.Invalid(field.NewPath("spec", "resources").Index(resourceIndex).Child("name"), name, "cannot mix named and anonymous resources, all resources must have a name or none must have a name"))
+				errs = append(errs, field.Required(field.NewPath("spec", "resources").Index(resourceIndex).Child("name"), "cannot mix named and anonymous resources, all resources must have a name or none must have a name"))
 				continue
 			}
 			continue

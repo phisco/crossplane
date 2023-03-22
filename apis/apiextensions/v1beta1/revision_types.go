@@ -695,11 +695,11 @@ type ConvertTransformType string
 
 // The list of supported ConvertTransform input and output types.
 const (
-	ConvertTransformTypeString  ConvertTransformType = "string"
-	ConvertTransformTypeBool    ConvertTransformType = "bool"
-	ConvertTransformTypeInt     ConvertTransformType = "int"
-	ConvertTransformTypeInt64   ConvertTransformType = "int64"
-	ConvertTransformTypeFloat64 ConvertTransformType = "float64"
+	TransformIOTypeString  ConvertTransformType = "string"
+	TransformIOTypeBool    ConvertTransformType = "bool"
+	TransformIOTypeInt     ConvertTransformType = "int"
+	TransformIOTypeInt64   ConvertTransformType = "int64"
+	TransformIOTypeFloat64 ConvertTransformType = "float64"
 )
 
 // ConvertTransformFormat defines the expected format of an input value of a
