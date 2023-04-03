@@ -116,10 +116,9 @@ func validationResponseFromStatus(allowed bool, status metav1.Status) admission.
 }
 
 // Validate validates the Composition by rendering it and then validating the rendered resources.
-func (h *handler) Validate(ctx context.Context, comp *v1.Composition) ([]string, error) {
-	var warns []string
+func (h *handler) Validate(ctx context.Context, comp *v1.Composition) (warns []string, err error) {
 	// Validate the composition itself, we'll disable it on the Validator below
-	if errs := comp.Validate(); len(errs) != 0 {
+	if warns, errs := comp.Validate(); len(errs) != 0 {
 		return warns, apierrors.NewInvalid(comp.GroupVersionKind().GroupKind(), comp.GetName(), errs)
 	}
 

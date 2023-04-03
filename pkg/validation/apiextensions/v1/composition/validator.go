@@ -31,15 +31,15 @@ import (
 type Validator struct{}
 
 // Validate validates the provided Composition.
-func (c *Validator) Validate(_ context.Context, obj runtime.Object) (warns []string, err error) {
+func (v *Validator) Validate(ctx context.Context, obj runtime.Object) (warns []string, errs field.ErrorList) {
 	comp, ok := obj.(*v1.Composition)
 	if !ok {
-		return warns, xperrors.New("not a v1 Composition")
+		return nil, append(errs, field.NotSupported(field.NewPath("kind"), obj.GetObjectKind().GroupVersionKind().Kind, []string{v1.CompositionGroupVersionKind.Kind}))
 	}
 
 	// Validate the composition itself, we'll disable it on the Validator below
-	if errs := comp.Validate(); len(errs) != 0 {
-		return warns, apierrors.NewInvalid(comp.GroupVersionKind().GroupKind(), comp.GetName(), errs)
+	if warns, errs := comp.Validate(); len(errs) != 0 {
+		return warns, errs
 	}
 	// TODO(phisco): get schemas and validate the Composition against it
 	return nil, nil
