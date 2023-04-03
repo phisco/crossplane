@@ -19,8 +19,11 @@ package composition
 import (
 	"context"
 
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	xperrors "github.com/crossplane/crossplane-runtime/pkg/errors"
 
@@ -28,7 +31,82 @@ import (
 )
 
 // Validator validates the provided Composition.
-type Validator struct{}
+type Validator struct {
+	logicalValidation func(*v1.Composition) ([]string, field.ErrorList)
+	crdGetter         CRDGetter
+}
+
+// CRDGetter is used to get all CRDs the Validator needs, either one by one or all at once.
+type CRDGetter interface {
+	Get(ctx context.Context, gvk schema.GroupVersionKind) (*apiextensions.CustomResourceDefinition, error)
+	GetAll(ctx context.Context) (map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition, error)
+}
+
+// ValidatorOption is used to configure the Validator.
+type ValidatorOption func(*Validator)
+
+// NewValidator returns a new Validator starting with the default configuration and applying
+// the given options.
+func NewValidator(opts ...ValidatorOption) (*Validator, error) {
+	v := &Validator{}
+	// Configure all default options and then any option passed in.
+	for _, f := range append([]ValidatorOption{
+		WithLogicalValidation(func(in *v1.Composition) ([]string, field.ErrorList) { return in.Validate() })},
+		opts...) {
+		f(v)
+	}
+
+	return v, v.isValid()
+}
+
+func (v *Validator) isValid() error {
+	if v.crdGetter == nil {
+		return xperrors.New("CRDGetterFn is required")
+	}
+	return nil
+}
+
+// WithCRDGetter returns a ValidatorOption that configure the validator to use the given CRDGetter to retrieve the CRD
+// it needs.
+func WithCRDGetter(c CRDGetter) ValidatorOption {
+	return func(v *Validator) {
+		v.crdGetter = c
+	}
+}
+
+// WithCRDGetterFromMap returns a ValidatorOption that configure the Validator to use the given map as a CRDGetter.
+func WithCRDGetterFromMap(m map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition) ValidatorOption {
+	return WithCRDGetter(crdGetterMap(m))
+}
+
+type crdGetterMap map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition
+
+func (c crdGetterMap) Get(_ context.Context, gvk schema.GroupVersionKind) (*apiextensions.CustomResourceDefinition, error) {
+	if crd, ok := c[gvk]; ok {
+		return &crd, nil
+	}
+	return nil, apierrors.NewNotFound(schema.GroupResource{Group: gvk.Group, Resource: "CustomResourceDefinition"}, gvk.String())
+}
+
+func (c crdGetterMap) GetAll(_ context.Context) (map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition, error) {
+	return c, nil
+}
+
+// WithLogicalValidation returns a ValidatorOption that configures the Validator to use the given function to logically
+// validate the Composition.
+func WithLogicalValidation(f func(composition *v1.Composition) (warns []string, errs field.ErrorList)) ValidatorOption {
+	return func(v *Validator) {
+		v.logicalValidation = f
+	}
+}
+
+// WithoutLogicalValidation returns a ValidatorOption that configures the Validator to not perform any logical check on
+// the Composition.
+func WithoutLogicalValidation() ValidatorOption {
+	return WithLogicalValidation(func(*v1.Composition) ([]string, field.ErrorList) {
+		return nil, nil
+	})
+}
 
 // Validate validates the provided Composition.
 func (v *Validator) Validate(ctx context.Context, obj runtime.Object) (warns []string, errs field.ErrorList) {
@@ -41,6 +119,15 @@ func (v *Validator) Validate(ctx context.Context, obj runtime.Object) (warns []s
 	if warns, errs := comp.Validate(); len(errs) != 0 {
 		return warns, errs
 	}
-	// TODO(phisco): get schemas and validate the Composition against it
+
+	// Validate patches given the above CRDs, skip if any of the required CRDs is not available
+	for _, f := range []func(context.Context, *v1.Composition) field.ErrorList{
+		// v.validatePatchesWithSchemas,
+		// TODO(phisco): add more phase 2 validation here
+	} {
+		errs = append(errs, f(ctx, comp)...)
+	}
+
+	// TODO(phisco): add more  phase 3 validation here
 	return nil, nil
 }

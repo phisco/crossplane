@@ -43,9 +43,8 @@ import (
 
 // handler implements the admission handler for Composition.
 type handler struct {
-	validator *composition.Validator
-	reader    client.Reader
-	decoder   *admission.Decoder
+	reader  client.Reader
+	decoder *admission.Decoder
 }
 
 // InjectDecoder injects the decoder.
@@ -69,11 +68,9 @@ func SetupWebhookWithManager(mgr ctrl.Manager) error {
 	}
 
 	// TODO(lsviben): switch to using admission.CustomValidator when https://github.com/kubernetes-sigs/controller-runtime/issues/1896 is resolved.
-	v := &composition.Validator{}
 	mgr.GetWebhookServer().Register(v1.CompositionValidatingWebhookPath,
 		&webhook.Admission{Handler: &handler{
-			validator: v,
-			reader:    unstructured.NewClient(mgr.GetClient()),
+			reader: unstructured.NewClient(mgr.GetClient()),
 		}})
 
 	return nil
@@ -116,6 +113,8 @@ func validationResponseFromStatus(allowed bool, status metav1.Status) admission.
 }
 
 // Validate validates the Composition by rendering it and then validating the rendered resources.
+//
+//nolint:gocyclo //TODO(phisco): refactor if possible
 func (h *handler) Validate(ctx context.Context, comp *v1.Composition) (warns []string, err error) {
 	// Validate the composition itself, we'll disable it on the Validator below
 	if warns, errs := comp.Validate(); len(errs) != 0 {
@@ -129,7 +128,7 @@ func (h *handler) Validate(ctx context.Context, comp *v1.Composition) (warns []s
 	}
 
 	// Get all the needed CRDs, Composite Resource, Managed resources ... ? Error out if missing in strict mode
-	_, errs := h.getNeededCRDs(ctx, comp)
+	gvkToCRD, errs := h.getNeededCRDs(ctx, comp)
 	var shouldSkip bool
 	for _, err := range errs {
 		if err == nil {
@@ -155,6 +154,19 @@ func (h *handler) Validate(ctx context.Context, comp *v1.Composition) (warns []s
 		return warns, nil
 	}
 
+	v, err := composition.NewValidator(
+		composition.WithCRDGetterFromMap(gvkToCRD),
+		// We disable logical Validation as this has already been done above
+		composition.WithoutLogicalValidation(),
+	)
+	if err != nil {
+		return warns, apierrors.NewInternalError(err)
+	}
+	schemaWarns, errList := v.Validate(ctx, comp)
+	warns = append(warns, schemaWarns...)
+	if len(errList) != 0 {
+		return warns, apierrors.NewInvalid(comp.GroupVersionKind().GroupKind(), comp.GetName(), errList)
+	}
 	return warns, nil
 }
 
@@ -167,12 +179,13 @@ func (h *handler) getNeededCRDs(ctx context.Context, comp *v1.Composition) (map[
 		comp.Spec.CompositeTypeRef.Kind)
 
 	compositeCRD, err := h.getCRDForGVK(ctx, &compositeResGVK)
-	switch {
-	case apierrors.IsNotFound(err):
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return nil, []error{err}
+		}
 		resultErrs = append(resultErrs, err)
-	case err != nil:
-		return nil, []error{err}
-	case compositeCRD != nil:
+	}
+	if compositeCRD != nil {
 		neededCrds[compositeResGVK] = *compositeCRD
 	}
 
