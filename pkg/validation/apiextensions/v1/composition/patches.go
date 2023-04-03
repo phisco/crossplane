@@ -1,3 +1,19 @@
+/*
+Copyright 2023 the Crossplane Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package composition
 
 import (
@@ -8,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/pointer"
+	"k8s.io/utils/strings/slices"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
@@ -247,8 +264,6 @@ func validateIOTypesWithTransforms(transforms []v1.Transform, fromType, toType x
 // validateFieldPath validates the given fieldPath is valid for the given schema.
 // It returns the type of the fieldPath and whether it is required, or any error.
 // If the returned type is "", but without error, it means the fieldPath is accepted by the schema, but not defined in it.
-//
-//nolint:gocyclo // TODO(phisco): refactor this function
 func validateFieldPath(schema *apiextensions.JSONSchemaProps, fieldPath string) (fieldType xpschema.KnownJSONType, required bool, err error) {
 	if fieldPath == "" {
 		return "", false, nil
@@ -262,10 +277,14 @@ func validateFieldPath(schema *apiextensions.JSONSchemaProps, fieldPath string) 
 		segments = segments[1:]
 		schema = &metadataSchema
 	}
-	current := schema
 	if len(segments) > 0 {
 		required = true
 	}
+	return validateFieldPathSegments(segments, schema, required, fieldPath)
+}
+
+func validateFieldPathSegments(segments fieldpath.Segments, schema *apiextensions.JSONSchemaProps, required bool, fieldPath string) (xpschema.KnownJSONType, bool, error) {
+	current := schema
 	for _, segment := range segments {
 		currentSegment, segmentRequired, err := validateFieldPathSegment(current, segment)
 		if err != nil {
@@ -297,63 +316,67 @@ func isMissingMetadataSchema(schema *apiextensions.JSONSchemaProps) bool {
 
 // validateFieldPathSegment validates that the given field path segment is valid for the given schema.
 // It returns the schema for the segment, whether the segment is required, and an error if the segment is invalid.
-//
-//nolint:gocyclo // TODO(phisco): refactor this function, add test cases
+// It returns the schema for the segment, whether the segment is wantRequired, and an error if the segment is invalid.
 func validateFieldPathSegment(parent *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (current *apiextensions.JSONSchemaProps, required bool, err error) {
+	switch segment.Type {
+	case fieldpath.SegmentField:
+		return validateFieldPathSegmentField(parent, segment)
+	case fieldpath.SegmentIndex:
+		return validateFieldPathSegmentIndex(parent, segment)
+	}
+	return nil, false, nil
+}
+
+func validateFieldPathSegmentField(parent *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (*apiextensions.JSONSchemaProps, bool, error) {
 	if parent == nil {
 		return nil, false, nil
 	}
-	switch segment.Type {
-	case fieldpath.SegmentField:
-		propType := parent.Type
-		if propType == "" {
-			propType = string(xpschema.KnownJSONTypeObject)
+	if segment.Type != fieldpath.SegmentField {
+		return nil, false, errors.Errorf("segment is not a field")
+	}
+	if propType := parent.Type; propType != "" && propType != string(xpschema.KnownJSONTypeObject) {
+		return nil, false, errors.Errorf("trying to access a field '%s' of object, but schema says parent is of type: '%v'", segment.Field, propType)
+	}
+	// TODO(phisco): handle other fields, e.g. CEL?
+	prop, exists := parent.Properties[segment.Field]
+	if !exists {
+		if pointer.BoolDeref(parent.XPreserveUnknownFields, false) {
+			return nil, false, nil
 		}
-		if propType != string(xpschema.KnownJSONTypeObject) {
-			return nil, false, errors.Errorf("trying to access a field '%s' of object, but schema says parent is of type: '%v'", segment.Field, propType)
+		if parent.AdditionalProperties != nil && parent.AdditionalProperties.Allows {
+			return parent.AdditionalProperties.Schema, false, nil
 		}
-		prop, exists := parent.Properties[segment.Field]
-		if !exists {
-			// TODO(phisco): handle other fields
-			if pointer.BoolDeref(parent.XPreserveUnknownFields, false) {
-				return nil, false, nil
-			}
-			if parent.AdditionalProperties != nil && parent.AdditionalProperties.Allows {
-				return parent.AdditionalProperties.Schema, false, nil
-			}
-			return nil, false, errors.Errorf("field '%s' is not valid according to the schema", segment.Field)
-		}
-		// TODO(lsviben): what about CEL?
-		var required bool
-		for _, req := range parent.Required {
-			if req == segment.Field {
-				required = true
-				break
-			}
-		}
-		return &prop, required, nil
-	case fieldpath.SegmentIndex:
-		if parent.Type != string(xpschema.KnownJSONTypeArray) {
-			return nil, false, errors.Errorf("trying to access a '%s' by index", parent.Type)
-		}
-		if parent.Items == nil {
-			return nil, false, errors.New("no items found in array")
-		}
-		// if there is a limit on max items and the index is above that, return an error
-		if parent.MaxItems != nil && *parent.MaxItems < int64(segment.Index) {
-			return nil, false, errors.Errorf("index is above the allowed size of the array: %d > %d", segment.Index, *parent.MaxItems)
-		}
-		if s := parent.Items.Schema; s != nil {
-			// return required if the array has a schema and a minimum size
-			return s, parent.MinItems != nil && *parent.MinItems > 0, nil
-		}
-		schemas := parent.Items.JSONSchemas
-		if len(schemas) < int(segment.Index) {
-			return nil, false, errors.Errorf("no schemas ")
-		}
+		return nil, false, errors.Errorf("field '%s' is not valid according to the schema", segment.Field)
+	}
+	return &prop, slices.Contains(parent.Required, segment.Field), nil
+}
 
-		// means there is no schema at all for this array
+func validateFieldPathSegmentIndex(parent *apiextensions.JSONSchemaProps, segment fieldpath.Segment) (*apiextensions.JSONSchemaProps, bool, error) {
+	if parent == nil {
 		return nil, false, nil
 	}
+	if segment.Type != fieldpath.SegmentIndex {
+		return nil, false, errors.Errorf("segment is not an index")
+	}
+	if parent.Type != string(xpschema.KnownJSONTypeArray) {
+		return nil, false, errors.Errorf("trying to access a '%s' by index", parent.Type)
+	}
+	if parent.Items == nil {
+		return nil, false, errors.New("no items found in array")
+	}
+	// if there is a limit on max items and the index is above that, return an error
+	if parent.MaxItems != nil && *parent.MaxItems < int64(segment.Index+1) {
+		return nil, false, errors.Errorf("index is above the allowed size of the array: %d > %d", segment.Index, *parent.MaxItems)
+	}
+	if s := parent.Items.Schema; s != nil {
+		// return wantRequired if the array has a schema and a minimum size
+		return s, parent.MinItems != nil && *parent.MinItems > 0, nil
+	}
+	schemas := parent.Items.JSONSchemas
+	if len(schemas) < int(segment.Index) {
+		return nil, false, errors.Errorf("no schemas ")
+	}
+
+	// means there is no schema at all for this array
 	return nil, false, nil
 }
