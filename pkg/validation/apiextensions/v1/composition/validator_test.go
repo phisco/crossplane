@@ -20,7 +20,7 @@ import (
 	"github.com/crossplane/crossplane/pkg/validation/errors"
 )
 
-func TestValidateComposition(t *testing.T) {
+func TestValidator_Validate(t *testing.T) {
 	type args struct {
 		comp      *v1.Composition
 		gvkToCRDs map[schema.GroupVersionKind]apiextensions.CustomResourceDefinition
@@ -44,7 +44,7 @@ func TestValidateComposition(t *testing.T) {
 			},
 		},
 		"RejectStrictNoCRDsWithPatches": {
-			reason: "Should accept a Composition if no CRDs are available, but no patches are defined",
+			reason: "Should reject a Composition if no CRDs are available and patches defined",
 			want: want{
 				errs: field.ErrorList{
 					{
@@ -402,10 +402,6 @@ func defaultGVKToCRDs() map[schema.GroupVersionKind]apiextensions.CustomResource
 		}] = crd
 	}
 	return m
-}
-
-func defaultCRDs() []runtime.Object {
-	return []runtime.Object{defaultManagedCrdBuilder().buildExtV1(), defaultCompositeCrdBuilder().buildExtV1()}
 }
 
 type builderOption func(*extv1.CustomResourceDefinition)
