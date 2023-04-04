@@ -369,8 +369,8 @@ func validateFieldPathSegmentIndex(parent *apiextensions.JSONSchemaProps, segmen
 		return nil, false, errors.Errorf("index is above the allowed size of the array: %d > %d", segment.Index, *parent.MaxItems)
 	}
 	if s := parent.Items.Schema; s != nil {
-		// return wantRequired if the array has a schema and a minimum size
-		return s, parent.MinItems != nil && *parent.MinItems > 0, nil
+		// return required true if the array has a schema and a minimum size
+		return s, parent.MinItems != nil && *parent.MinItems > int64(segment.Index), nil
 	}
 	schemas := parent.Items.JSONSchemas
 	if len(schemas) < int(segment.Index) {

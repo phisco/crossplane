@@ -424,9 +424,8 @@ func Test_validateFieldPath(t *testing.T) {
 													Properties: map[string]apiextensions.JSONSchemaProps{
 														"bar": {Type: "string"}}}}}}}}}}}},
 		},
-		"AcceptMinItems1Required": {
-			// TODO(phisco): chekc it's correct
-			reason: "Should validate arrays properly with a field required the whole chain, minimum length 1",
+		"AcceptRequiredInMinItemsRange": {
+			reason: "Should validate arrays properly with a field required the whole chain, accessing in min items range",
 			want:   want{err: false, fieldType: "string", required: true},
 			args: args{
 				fieldPath: "spec.forProvider.foo[1].bar",
@@ -441,7 +440,30 @@ func Test_validateFieldPath(t *testing.T) {
 									Properties: map[string]apiextensions.JSONSchemaProps{
 										"foo": {
 											Type:     "array",
-											MinItems: &[]int64{1}[0],
+											MinItems: &[]int64{2}[0],
+											Items: &apiextensions.JSONSchemaPropsOrArray{
+												Schema: &apiextensions.JSONSchemaProps{
+													Required: []string{"bar"},
+													Properties: map[string]apiextensions.JSONSchemaProps{
+														"bar": {Type: "string"}}}}}}}}}}}},
+		},
+		"AcceptRequiredAboveMinItemsRange": {
+			reason: "Should validate arrays properly with a field required the whole chain, accessing above min items range",
+			want:   want{err: false, fieldType: "string", required: false},
+			args: args{
+				fieldPath: "spec.forProvider.foo[10].bar",
+				schema: &apiextensions.JSONSchemaProps{
+					Required: []string{"spec"},
+					Properties: map[string]apiextensions.JSONSchemaProps{
+						"spec": {
+							Required: []string{"forProvider"},
+							Properties: map[string]apiextensions.JSONSchemaProps{
+								"forProvider": {
+									Required: []string{"foo"},
+									Properties: map[string]apiextensions.JSONSchemaProps{
+										"foo": {
+											Type:     "array",
+											MinItems: &[]int64{2}[0],
 											Items: &apiextensions.JSONSchemaPropsOrArray{
 												Schema: &apiextensions.JSONSchemaProps{
 													Required: []string{"bar"},
@@ -538,13 +560,12 @@ func Test_validateFieldPathSegmentIndex(t *testing.T) {
 			},
 			want: want{err: false, required: false},
 		},
-		// TODO(phisco): check if this is correct
-		"AcceptMinSize1ArrayRequired": {
-			name: "Should return no error and required if the parent is an array with min size 1",
+		"AcceptMinSizeArrayBelowRequired": {
+			name: "Should return no error and required if the parent is an array, accessing element below min size",
 			args: args{
 				parent: &apiextensions.JSONSchemaProps{
 					Type:     "array",
-					MinItems: &[]int64{1}[0],
+					MinItems: &[]int64{2}[0],
 					Items: &apiextensions.JSONSchemaPropsOrArray{
 						Schema: &apiextensions.JSONSchemaProps{
 							Type: "string",
@@ -557,6 +578,25 @@ func Test_validateFieldPathSegmentIndex(t *testing.T) {
 				},
 			},
 			want: want{err: false, required: true},
+		},
+		"AcceptMinSizeArrayAboveNotRequired": {
+			name: "Should return no error and not required if the parent is an array, accessing element above min size",
+			args: args{
+				parent: &apiextensions.JSONSchemaProps{
+					Type:     "array",
+					MinItems: &[]int64{2}[0],
+					Items: &apiextensions.JSONSchemaPropsOrArray{
+						Schema: &apiextensions.JSONSchemaProps{
+							Type: "string",
+						},
+					},
+				},
+				segment: fieldpath.Segment{
+					Type:  fieldpath.SegmentIndex,
+					Index: 3,
+				},
+			},
+			want: want{err: false, required: false},
 		},
 		"AcceptIndex0MinSize1": {
 			name: "Should return no error and required if the parent is an array with min size 1 and the index is 0",
