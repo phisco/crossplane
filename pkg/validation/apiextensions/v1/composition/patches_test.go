@@ -803,3 +803,141 @@ func Test_validateFieldPathSegmentField(t *testing.T) {
 		})
 	}
 }
+
+func Test_getSchemaForVersion(t *testing.T) {
+	type args struct {
+		crd     *apiextensions.CustomResourceDefinition
+		version string
+	}
+	type want struct {
+		schema *apiextensions.JSONSchemaProps
+	}
+	fooSchema := &apiextensions.JSONSchemaProps{
+		Type: "object",
+		Properties: map[string]apiextensions.JSONSchemaProps{
+			"foo": {
+				Type: "string",
+			},
+		},
+	}
+	barSchema := &apiextensions.JSONSchemaProps{
+		Type: "object",
+		Properties: map[string]apiextensions.JSONSchemaProps{
+			"bar": {
+				Type: "string",
+			},
+		},
+	}
+	cases := map[string]struct {
+		name string
+		args args
+		want want
+	}{
+		"GetSchemaForVersionTopLevel": {
+			name: "Should return the schema for the given version",
+			args: args{
+				crd: &apiextensions.CustomResourceDefinition{
+					Spec: apiextensions.CustomResourceDefinitionSpec{
+						Validation: &apiextensions.CustomResourceValidation{
+							OpenAPIV3Schema: fooSchema,
+						},
+					},
+				},
+			},
+			want: want{
+				schema: fooSchema,
+			},
+		},
+		"GetSchemaForVersionTopLevelAlways": {
+			name: "Should return the schema for the given version always, even if additional versions are specified, which should never happen",
+			args: args{
+				crd: &apiextensions.CustomResourceDefinition{
+					Spec: apiextensions.CustomResourceDefinitionSpec{
+						Validation: &apiextensions.CustomResourceValidation{
+							OpenAPIV3Schema: fooSchema,
+						},
+						Versions: []apiextensions.CustomResourceDefinitionVersion{
+							{
+								Name:    "v1",
+								Served:  true,
+								Storage: true,
+								Schema: &apiextensions.CustomResourceValidation{
+									OpenAPIV3Schema: barSchema,
+								},
+							},
+						},
+					},
+				},
+				version: "v1",
+			},
+			want: want{
+				schema: fooSchema,
+			},
+		},
+		"GetSchemaForVersionExisting": {
+			name: "Should return the schema for the given version",
+			args: args{
+				crd: &apiextensions.CustomResourceDefinition{
+					Spec: apiextensions.CustomResourceDefinitionSpec{
+						Versions: []apiextensions.CustomResourceDefinitionVersion{
+							{
+								Name:    "v1alpha1",
+								Served:  true,
+								Storage: true,
+								Schema: &apiextensions.CustomResourceValidation{
+									OpenAPIV3Schema: fooSchema,
+								},
+							},
+							{
+								Name:    "v1",
+								Served:  true,
+								Storage: true,
+								Schema: &apiextensions.CustomResourceValidation{
+									OpenAPIV3Schema: barSchema,
+								},
+							},
+						},
+					},
+				},
+				version: "v1",
+			},
+			want: want{
+				schema: barSchema,
+			},
+		},
+		"GetSchemaForVersionNotExisting": {
+			name: "Should return nil if the given version does not exist",
+			args: args{
+				crd: &apiextensions.CustomResourceDefinition{
+					Spec: apiextensions.CustomResourceDefinitionSpec{
+						Versions: []apiextensions.CustomResourceDefinitionVersion{
+							{
+								Name:    "v1",
+								Served:  true,
+								Storage: true,
+								Schema: &apiextensions.CustomResourceValidation{
+									OpenAPIV3Schema: &apiextensions.JSONSchemaProps{
+										Type: "object",
+									},
+								},
+							},
+						},
+					},
+				},
+				version: "v2",
+			},
+			want: want{
+				schema: nil,
+			},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := getSchemaForVersion(tc.args.crd, tc.args.version)
+			if diff := cmp.Diff(tc.want.schema, got); diff != "" {
+				t.Errorf("\n%s\ngetSchemaForVersion(...): -want, +got: %s\n", name, diff)
+			}
+		})
+	}
+
+}

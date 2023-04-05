@@ -327,6 +327,26 @@ func TestValidator_Validate(t *testing.T) {
 				})),
 			},
 		},
+		"CRDMultipleSchemas": {
+			reason: "Should accept a Composition with a patch that references a field that exists in multiple schemas, if all CRDs are found",
+			want: want{
+				errs: nil,
+			},
+			args: args{
+				gvkToCRDs: buildGvkToCRDs(defaultManagedCrdBuilder().withOption(func(d *extv1.CustomResourceDefinition) {
+					d.Spec.Versions = append(d.Spec.Versions, *d.Spec.Versions[0].DeepCopy())
+					d.Spec.Versions[len(d.Spec.Versions)-1].Name = "v2"
+					d.Spec.Versions[len(d.Spec.Versions)-1].Schema.OpenAPIV3Schema.Properties["spec"].Properties["someNewField"] = extv1.JSONSchemaProps{
+						Type: "string",
+					}
+				}).build(), defaultCompositeCrdBuilder().build()),
+				comp: buildDefaultComposition(t, v1.CompositionValidationModeLoose, nil, withPatches(0, v1.Patch{
+					Type:          v1.PatchTypeFromCompositeFieldPath,
+					FromFieldPath: pointer.String("spec.someField"),
+					ToFieldPath:   pointer.String("spec.someOtherField"),
+				})),
+			},
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

@@ -53,6 +53,21 @@ func (v *Validator) validatePatchesWithSchemas(ctx context.Context, comp *v1.Com
 	return errs
 }
 
+func getSchemaForVersion(crd *apiextensions.CustomResourceDefinition, version string) *apiextensions.JSONSchemaProps {
+	if crd.Spec.Validation != nil {
+		return crd.Spec.Validation.OpenAPIV3Schema
+	}
+	for _, v := range crd.Spec.Versions {
+		if v.Name == version {
+			if v.Schema == nil {
+				return nil
+			}
+			return v.Schema.OpenAPIV3Schema
+		}
+	}
+	return nil
+}
+
 // validatePatchWithSchemas validates a patch against the resources schemas.
 func (v *Validator) validatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): refactor
 	ctx context.Context,
@@ -72,14 +87,17 @@ func (v *Validator) validatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): 
 		return field.Invalid(field.NewPath("spec", "resources").Index(resourceNumber).Child("base"), resource.Base, err.Error())
 	}
 
-	compositeCRD, err := v.crdGetter.Get(ctx, schema.FromAPIVersionAndKind(
+	compositeResGVK := schema.FromAPIVersionAndKind(
 		comp.Spec.CompositeTypeRef.APIVersion,
 		comp.Spec.CompositeTypeRef.Kind,
-	))
+	)
+
+	compositeCRD, err := v.crdGetter.Get(ctx, compositeResGVK)
 	if err != nil {
 		return field.InternalError(field.NewPath("spec").Child("resources").Index(resourceNumber), errors.Wrapf(err, "cannot find composite type %s: %s", comp.Spec.CompositeTypeRef, err))
 	}
-	resourceCRD, err := v.crdGetter.Get(ctx, res.GetObjectKind().GroupVersionKind())
+	resourceGVK := res.GetObjectKind().GroupVersionKind()
+	resourceCRD, err := v.crdGetter.Get(ctx, resourceGVK)
 	if err != nil {
 		return field.InternalError(field.NewPath("spec").Child("resources").Index(resourceNumber), errors.Errorf("cannot find resource type %s: %s", res.GetObjectKind().GroupVersionKind(), err))
 	}
@@ -90,25 +108,27 @@ func (v *Validator) validatePatchWithSchemas( //nolint:gocyclo // TODO(phisco): 
 	case v1.PatchTypeFromCompositeFieldPath:
 		fromType, toType, validationErr = ValidateFromCompositeFieldPathPatch(
 			patch,
-			compositeCRD.Spec.Validation.OpenAPIV3Schema,
-			resourceCRD.Spec.Validation.OpenAPIV3Schema,
+			getSchemaForVersion(compositeCRD, compositeResGVK.Version),
+			getSchemaForVersion(resourceCRD, resourceGVK.Version),
 		)
 	case v1.PatchTypeToCompositeFieldPath:
 		fromType, toType, validationErr = ValidateFromCompositeFieldPathPatch(
 			patch,
-			resourceCRD.Spec.Validation.OpenAPIV3Schema,
-			compositeCRD.Spec.Validation.OpenAPIV3Schema,
+			getSchemaForVersion(resourceCRD, resourceGVK.Version),
+			getSchemaForVersion(compositeCRD, compositeResGVK.Version),
 		)
 	case v1.PatchTypeCombineFromComposite:
 		fromType, toType, validationErr = ValidateCombineFromCompositePathPatch(
 			patch,
-			compositeCRD.Spec.Validation.OpenAPIV3Schema,
-			resourceCRD.Spec.Validation.OpenAPIV3Schema)
+			getSchemaForVersion(compositeCRD, compositeResGVK.Version),
+			getSchemaForVersion(resourceCRD, resourceGVK.Version),
+		)
 	case v1.PatchTypeCombineToComposite:
 		fromType, toType, validationErr = ValidateCombineFromCompositePathPatch(
 			patch,
-			resourceCRD.Spec.Validation.OpenAPIV3Schema,
-			compositeCRD.Spec.Validation.OpenAPIV3Schema)
+			getSchemaForVersion(resourceCRD, resourceGVK.Version),
+			getSchemaForVersion(compositeCRD, compositeResGVK.Version),
+		)
 	case v1.PatchTypePatchSet:
 		// Should never happen as patchSets should have been dereferenced and removed by now.
 		return field.InternalError(field.NewPath("spec", "resources").Index(resourceNumber).Child("patches").Index(patchNumber), errors.Errorf("patchSet should have been dereferenced"))
