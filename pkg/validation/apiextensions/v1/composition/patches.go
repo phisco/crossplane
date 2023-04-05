@@ -183,7 +183,7 @@ func ValidateCombineFromCompositePathPatch(
 		return "", "", field.Invalid(field.NewPath("combine", "strategy"), patch.Combine.Strategy, "combine strategy is not supported")
 	}
 
-	// TODO(lsviben): check if we could validate the patch combine format
+	// TODO(lsviben): check if we could validate the patch combine format, worth looking at https://cs.opensource.google/go/x/tools/+/refs/tags/v0.7.0:go/analysis/passes/printf/printf.go;l=1025
 
 	return fromType, toType, nil
 }
@@ -337,7 +337,7 @@ func validateFieldPathSegmentField(parent *apiextensions.JSONSchemaProps, segmen
 	if propType := parent.Type; propType != "" && propType != string(xpschema.KnownJSONTypeObject) {
 		return nil, false, errors.Errorf("trying to access a field '%s' of object, but schema says parent is of type: '%v'", segment.Field, propType)
 	}
-	// TODO(phisco): handle other fields, e.g. CEL?
+	// TODO(phisco): any remaining fields? e.g. XValidations' CEL Rules?
 	prop, exists := parent.Properties[segment.Field]
 	if !exists {
 		if pointer.BoolDeref(parent.XPreserveUnknownFields, false) {
