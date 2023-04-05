@@ -29,15 +29,18 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	"github.com/crossplane/crossplane-runtime/pkg/controller"
 	xperrors "github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
 
 	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
+	"github.com/crossplane/crossplane/internal/features"
 	"github.com/crossplane/crossplane/pkg/validation/apiextensions/v1/composition"
 )
 
@@ -45,6 +48,7 @@ import (
 type handler struct {
 	reader  client.Reader
 	decoder *admission.Decoder
+	options controller.Options
 }
 
 // InjectDecoder injects the decoder.
@@ -54,23 +58,26 @@ func (h *handler) InjectDecoder(decoder *admission.Decoder) error {
 }
 
 // SetupWebhookWithManager sets up the webhook with the manager.
-func SetupWebhookWithManager(mgr ctrl.Manager) error {
-	indexer := mgr.GetFieldIndexer()
-	if err := indexer.IndexField(context.Background(), &extv1.CustomResourceDefinition{}, "spec.group", func(obj client.Object) []string {
-		return []string{obj.(*extv1.CustomResourceDefinition).Spec.Group}
-	}); err != nil {
-		return err
-	}
-	if err := indexer.IndexField(context.Background(), &extv1.CustomResourceDefinition{}, "spec.names.kind", func(obj client.Object) []string {
-		return []string{obj.(*extv1.CustomResourceDefinition).Spec.Names.Kind}
-	}); err != nil {
-		return err
+func SetupWebhookWithManager(mgr ctrl.Manager, options controller.Options) error {
+	if options.Features.Enabled(features.EnableAlphaCompositionWebhookSchemaValidation) {
+		indexer := mgr.GetFieldIndexer()
+		if err := indexer.IndexField(context.Background(), &extv1.CustomResourceDefinition{}, "spec.group", func(obj client.Object) []string {
+			return []string{obj.(*extv1.CustomResourceDefinition).Spec.Group}
+		}); err != nil {
+			return err
+		}
+		if err := indexer.IndexField(context.Background(), &extv1.CustomResourceDefinition{}, "spec.names.kind", func(obj client.Object) []string {
+			return []string{obj.(*extv1.CustomResourceDefinition).Spec.Names.Kind}
+		}); err != nil {
+			return err
+		}
 	}
 
 	// TODO(lsviben): switch to using admission.CustomValidator when https://github.com/kubernetes-sigs/controller-runtime/issues/1896 is resolved.
 	mgr.GetWebhookServer().Register(v1.CompositionValidatingWebhookPath,
 		&webhook.Admission{Handler: &handler{
-			reader: unstructured.NewClient(mgr.GetClient()),
+			reader:  unstructured.NewClient(mgr.GetClient()),
+			options: options,
 		}})
 
 	return nil
@@ -117,8 +124,14 @@ func validationResponseFromStatus(allowed bool, status metav1.Status) admission.
 //nolint:gocyclo //TODO(phisco): refactor if possible
 func (h *handler) Validate(ctx context.Context, comp *v1.Composition) (warns []string, err error) {
 	// Validate the composition itself, we'll disable it on the Validator below
-	if warns, errs := comp.Validate(); len(errs) != 0 {
-		return warns, apierrors.NewInvalid(comp.GroupVersionKind().GroupKind(), comp.GetName(), errs)
+	var validationErrs field.ErrorList
+	warns, validationErrs = comp.Validate()
+	if len(validationErrs) != 0 {
+		return warns, apierrors.NewInvalid(comp.GroupVersionKind().GroupKind(), comp.GetName(), validationErrs)
+	}
+
+	if !h.options.Features.Enabled(features.EnableAlphaCompositionWebhookSchemaValidation) {
+		return warns, nil
 	}
 
 	// Get the composition validation mode from annotation
