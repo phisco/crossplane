@@ -31,6 +31,10 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composed"
 )
 
+const (
+	errUnableToParse = "cannot parse base"
+)
+
 // CompositionSpec specifies desired state of a composition.
 type CompositionSpec struct {
 	// CompositeTypeRef specifies the type of composite resource that this
@@ -181,7 +185,7 @@ func (ct *ComposedTemplate) initBaseObject() error {
 	cd := composed.New()
 	err := json.Unmarshal(ct.Base.Raw, cd)
 	if err != nil {
-		return errors.Wrap(err, "cannot parse base")
+		return errors.Wrap(err, errUnableToParse)
 	}
 	ct.Base.Object = cd
 	return nil

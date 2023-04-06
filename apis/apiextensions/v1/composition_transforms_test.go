@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/pointer"
 
+	xperrors "github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 
 	"github.com/crossplane/crossplane/pkg/validation/schema"
@@ -467,7 +468,7 @@ func TestFromKnownJSONType(t *testing.T) {
 	}
 	type want struct {
 		out TransformIOType
-		err bool
+		err error
 	}
 	cases := map[string]struct {
 		reason string
@@ -498,7 +499,7 @@ func TestFromKnownJSONType(t *testing.T) {
 				t: schema.KnownJSONType("foo"),
 			},
 			want: want{
-				err: true,
+				err: xperrors.Errorf(errFmtUnknownJSONType, "foo"),
 			},
 		},
 		"InvalidEmpty": {
@@ -507,7 +508,7 @@ func TestFromKnownJSONType(t *testing.T) {
 				t: "",
 			},
 			want: want{
-				err: true,
+				err: xperrors.Errorf(errFmtUnknownJSONType, ""),
 			},
 		},
 		"InvalidNull": {
@@ -516,7 +517,7 @@ func TestFromKnownJSONType(t *testing.T) {
 				t: schema.KnownJSONTypeNull,
 			},
 			want: want{
-				err: true,
+				err: xperrors.Errorf(errFmtUnsupportedJSONType, schema.KnownJSONTypeNull),
 			},
 		},
 		"ValidBoolean": {
@@ -532,19 +533,21 @@ func TestFromKnownJSONType(t *testing.T) {
 			reason: "Array should not be valid",
 			args:   args{t: schema.KnownJSONTypeArray},
 			want: want{
-				err: true,
+				err: xperrors.Errorf(errFmtUnsupportedJSONType, schema.KnownJSONTypeArray),
 			},
 		},
 		"InvalidObject": {
 			reason: "Object should not be valid",
 			args:   args{t: schema.KnownJSONTypeObject},
-			want:   want{err: true},
+			want: want{
+				err: xperrors.Errorf(errFmtUnsupportedJSONType, schema.KnownJSONTypeObject),
+			},
 		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			got, err := FromKnownJSONType(tc.args.t)
-			if diff := cmp.Diff(tc.want.err, err != nil); diff != "" {
+			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\nFromKnownJSONType(...): -want error, +got error:\n%s", tc.reason, diff)
 				return
 			}

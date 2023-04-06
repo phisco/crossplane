@@ -5,6 +5,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	xperrors "github.com/crossplane/crossplane-runtime/pkg/errors"
+	"github.com/crossplane/crossplane-runtime/pkg/test"
 )
 
 func TestComposition_GetValidationMode(t *testing.T) {
@@ -13,7 +16,7 @@ func TestComposition_GetValidationMode(t *testing.T) {
 	}
 	type want struct {
 		mode CompositionValidationMode
-		err  bool
+		err  error
 	}
 	cases := map[string]struct {
 		reason string
@@ -58,7 +61,7 @@ func TestComposition_GetValidationMode(t *testing.T) {
 				},
 			},
 			want: want{
-				err: true,
+				err: xperrors.Errorf(errFmtInvalidCompositionValidationMode, "invalid"),
 			},
 		},
 	}
@@ -68,7 +71,7 @@ func TestComposition_GetValidationMode(t *testing.T) {
 			if diff := cmp.Diff(tc.want.mode, got); diff != "" {
 				t.Errorf("\n%s\nGetValidationMode(...) -want, +got:\n%s", tc.reason, diff)
 			}
-			if diff := cmp.Diff(tc.want.err, err != nil); diff != "" {
+			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\nGetValidationMode(...) -want, +got:\n%s", tc.reason, diff)
 			}
 		})

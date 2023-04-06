@@ -419,6 +419,9 @@ const (
 	StringConversionTypeToSHA1     StringConversionType = "ToSha1"
 	StringConversionTypeToSHA256   StringConversionType = "ToSha256"
 	StringConversionTypeToSHA512   StringConversionType = "ToSha512"
+
+	errFmtUnknownJSONType     = "unknown JSON type: %q"
+	errFmtUnsupportedJSONType = "JSON type not supported: %q"
 )
 
 // A StringTransform returns a string given the supplied input.
@@ -551,9 +554,9 @@ func FromKnownJSONType(t schema.KnownJSONType) (TransformIOType, error) {
 	case schema.KnownJSONTypeNumber:
 		return TransformIOTypeFloat64, nil
 	case schema.KnownJSONTypeObject, schema.KnownJSONTypeArray, schema.KnownJSONTypeNull:
-		return "", errors.Errorf("JSON type not supported: %q", t)
+		return "", errors.Errorf(errFmtUnsupportedJSONType, t)
 	default:
-		return "", errors.Errorf("unknown JSON type: %q", t)
+		return "", errors.Errorf(errFmtUnknownJSONType, t)
 	}
 }
 

@@ -30,6 +30,8 @@ const (
 	CompositionValidatingWebhookPath = "/validate-apiextensions-crossplane-io-v1-composition"
 	// CompositionValidationModeAnnotation is the annotation that can be used to specify the validation mode for a Composition.
 	CompositionValidationModeAnnotation = "crossplane.io/composition-validation-mode"
+
+	errFmtInvalidCompositionValidationMode = "invalid composition validation mode: %s"
 )
 
 // CompositionValidationMode is the validation mode for a Composition.
@@ -70,5 +72,5 @@ func (in *Composition) GetValidationMode() (CompositionValidationMode, error) {
 	case CompositionValidationModeStrict, CompositionValidationModeLoose:
 		return mode, nil
 	}
-	return "", errors.Errorf("invalid composition validation mode: %s", mode)
+	return "", errors.Errorf(errFmtInvalidCompositionValidationMode, mode)
 }

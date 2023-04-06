@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -25,6 +26,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	xperrors "github.com/crossplane/crossplane-runtime/pkg/errors"
+	"github.com/crossplane/crossplane-runtime/pkg/test"
 )
 
 func TestComposedTemplate_GetBaseObject(t *testing.T) {
@@ -33,7 +37,7 @@ func TestComposedTemplate_GetBaseObject(t *testing.T) {
 	}
 	type want struct {
 		output client.Object
-		err    bool
+		err    error
 	}
 	tests := map[string]struct {
 		reason string
@@ -71,14 +75,14 @@ func TestComposedTemplate_GetBaseObject(t *testing.T) {
 				},
 			},
 			want: want{
-				err: true,
+				err: xperrors.Wrap(errors.New("invalid character '$' looking for beginning of object key string"), errUnableToParse),
 			},
 		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			got, err := tc.args.ct.GetBaseObject()
-			if diff := cmp.Diff(tc.want.err, err != nil, cmpopts.EquateErrors()); diff != "" {
+			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\nGetBaseObject(...): -want error, +got error: \n%s", tc.reason, diff)
 				return
 			}
