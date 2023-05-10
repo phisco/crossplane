@@ -1,0 +1,165 @@
+{
+  "forkProcessing": "enabled",
+  "extends": [
+    "config:base"
+  ],
+  "rebaseWhen": "conflicted",
+  "prConcurrentLimit": 5,
+  "baseBranches": ["master","release-1.10","release-1.11","release-1.12"],
+  "ignorePaths": ["design/**"],
+  "postUpdateOptions": ["gomodTidy"],
+  "semanticCommits": "disabled",
+  "labels": ["automated"],
+  "regexManagers": [
+    {
+      "fileMatch": ["^\\.github\\/workflows\\/[^/]+\\.ya?ml$"],
+      "matchStrings": [
+        "GO_VERSION: '(?<currentValue>.*?)'\\n"
+      ],
+      "datasourceTemplate": "golang-version",
+      "depNameTemplate": "golang"
+    }, {
+      "fileMatch": ["^\\.github\\/workflows\\/[^/]+\\.ya?ml$","^Makefile$"],
+      "matchStrings": [
+        "GOLANGCI_VERSION: 'v(?<currentValue>.*?)'\\n",
+        "GOLANGCILINT_VERSION = (?<currentValue>.*?)\\n"
+      ],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "golangci/golangci-lint",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    }, {
+      "fileMatch": ["^Makefile$"],
+      "matchStrings": [
+        "HELM3_VERSION = (?<currentValue>.*?)\\n"
+      ],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "helm/helm",
+    }, {
+      "fileMatch": ["^Makefile$"],
+      "matchStrings": [
+        "KIND_VERSION = (?<currentValue>.*?)\\n"
+      ],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "kubernetes-sigs/kind",
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      matchBaseBranches: [ "/^release-.*/"],
+      enabled: false,
+    }, {
+      "matchDatasources": ["docker"],
+      matchBaseBranches: [ "/^release-.*/"],
+      enabled: true,
+    }, {
+      "matchDatasources": ["docker"],
+      "schedule": ["every 2 week on monday"],
+      enabled: true,
+    }, {
+      "matchDatasources": [
+        "go"
+      ],
+      "matchDepNames": [
+        "k8s.io/client-go"
+      ],
+      "allowedVersions": "<1.0"
+    }, {
+      "matchDatasources": [
+        "go"
+      ],
+      "groupName": "kubernetes patches",
+      "matchUpdateTypes": [
+        "digest",
+      ],
+      "extends": ['schedule:monthly'],
+      "matchPackagePrefixes": [
+        "k8s.io",
+        "sigs.k8s.io"
+      ]
+    }, {
+      "matchDatasources": [
+        "go"
+      ],
+      "groupName": "kubernetes patches",
+      "matchUpdateTypes": [
+        "patch",
+      ],
+      "matchPackagePrefixes": [
+        "k8s.io",
+        "sigs.k8s.io"
+      ]
+    }, {
+      "matchDatasources": [
+        "go"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor"
+      ],
+      "matchPackagePrefixes": [
+        "k8s.io",
+        "sigs.k8s.io"
+      ]
+    }, {
+      "matchDatasources": [
+        "go"
+      ],
+      "matchPackagePatterns": [
+        "*"
+      ],
+      "enabled": false,
+      "excludePackagePrefixes": [
+        "k8s.io",
+        "sigs.k8s.io"
+      ],
+      "matchUpdateTypes": [
+        "major",
+      ],
+    }, {
+      "matchDatasources": [
+        "go"
+      ],
+      "matchPackagePatterns": [
+        "*"
+      ],
+      "enabled": false,
+      "excludePackagePrefixes": [
+        "k8s.io",
+        "sigs.k8s.io"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "groupName": "all non-major go dependencies"
+    }, {
+      "matchDepTypes": [
+        "action"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "groupName": "all non-major github action",
+      "pinDigests": true
+    },{
+      "matchDepTypes": [
+        "action"
+      ],
+      "pinDigests": true
+    },{
+      "matchDepTypes": [
+        "action"
+      ],
+      "matchDepNames": [
+        "google/oss-fuzz"
+      ],
+      "enabled": false
+    }
+  ]
+}
