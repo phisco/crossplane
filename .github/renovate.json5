@@ -68,11 +68,6 @@
   },
   "packageRules": [
     {
-      // we want individual PRs for each indirect dependency having a security issues
-      "matchManagers": ["gomod"],
-      "matchDepTypes": ["indirect"],
-      "enabled": true,
-    }, {
 // We don't want dependency updates which are not security related for
 // release branches, except for docker images
       matchBaseBranches: [ "/^release-.*/"],
@@ -110,9 +105,20 @@
         "major",
         "minor",
         "patch",
-        "digest"
+        "digest",
       ],
       "groupName": "all go dependencies"
+    }, {
+// we want individual PRs for each indirect dependency having a security issues
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["indirect"],
+      "matchDatasources": [
+        "go"
+      ],
+      "matchPackagePatterns": [
+        "*"
+      ],
+      "enabled": true,
     }, {
 // We want a single PR for all non-major bumps of Github Actions
       "matchDepTypes": [
