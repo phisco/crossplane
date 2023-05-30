@@ -67,9 +67,14 @@
     "enabled": true
   },
   "packageRules": [
+    {
+      // we want individual PRs for each indirect dependency having a security issues
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["indirect"],
+      "enabled": true,
+    }, {
 // We don't want dependency updates which are not security related for
 // release branches, except for docker images
-    {
       matchBaseBranches: [ "/^release-.*/"],
       enabled: false,
     }, {
