@@ -109,6 +109,11 @@
       ],
       "groupName": "all go dependencies"
     }, {
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["indirect"],
+      "enabled": true,
+      "groupName": null,
+    }, {
 // We want a single PR for all non-major bumps of Github Actions
       "matchDepTypes": [
         "action"
