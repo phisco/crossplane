@@ -121,6 +121,38 @@ func TestBuild(t *testing.T) {
 			},
 			want: errors.Wrap(errBoom, errLintPackage),
 		},
+		"BigInput": {
+			reason: "Should not allocate memory for the entire input.",
+			args: args{
+				be: parser.NewEchoBackend(`
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: nop.sqlinstances.example.org
+spec:
+  writeConnectionSecretsToNamespace: crossplane-system
+  compositeTypeRef:
+    apiVersion: example.org/v1alpha1
+    kind: XSQLInstance
+  environment:
+    patches:
+    - # fromFieldPath: spec.parameters.engineVersion
+      toFieldPath: complex.c.f
+    environmentConfigs:
+    - type: Reference
+      ref:
+        #name: example-environment
+    - selector:
+        matchLabels:
+        - type: FromCompositeFieldPath
+          key: stage
+          #valueFromFieldPath: metadata.labels[stage]
+`),
+				p: p,
+				l: parser.NewPackageLinter(nil, nil, nil),
+			},
+		},
 	}
 
 	for name, tc := range cases {
