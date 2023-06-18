@@ -218,7 +218,7 @@ func TestFetch(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			f := NewAPIEnvironmentFetcher(tc.args.kube)
-			got, err := f.Fetch(context.Background(), tc.args.cr)
+			got, err := f.Fetch(context.Background(), tc.args.cr, true)
 
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\nr.Reconcile(...): -want error, +got error:\n%s", tc.reason, diff)
