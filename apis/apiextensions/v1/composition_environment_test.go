@@ -135,7 +135,7 @@ func TestEnvironmentIsNoop(t *testing.T) {
 			want: false,
 		},
 		"DontResolveWhenPolicyNotAlways": {
-			reason: "Should resolve when resolve policy is Always",
+			reason: "Should not resolve when resolve policy is not Always",
 			args: args{
 				ec: &EnvironmentConfiguration{
 					EnvironmentConfigs: []EnvironmentSource{
