@@ -40,9 +40,11 @@ const (
 	errListEnvironmentConfigs          = "failed to list environments"
 	errListEnvironmentConfigsNoResult  = "no EnvironmentConfig found that matches labels"
 	errFmtInvalidEnvironmentSourceType = "invalid source type '%s'"
-
-	errFmtInvalidLabelMatcherType = "invalid label matcher type '%s'"
-	errFmtRequiredField           = "%s is required by type %s"
+	errFmtInvalidLabelMatcherType      = "invalid label matcher type '%s'"
+	errFmtRequiredField                = "%s is required by type %s"
+	errUnknownSelectorMode             = "unknown mode '%s'"
+	errSortNotMatchingTypes            = "not matching types: %T : %T"
+	errSortUnknownType                 = "unexpected type %T"
 )
 
 // NewNoopEnvironmentSelector creates a new NoopEnvironmentSelector.
@@ -160,7 +162,7 @@ func (s *APIEnvironmentSelector) buildEnvironmentConfigRefFromSelector(cl *v1alp
 		}
 
 	default:
-		return []corev1.ObjectReference{}, fmt.Errorf("unknown mode")
+		return []corev1.ObjectReference{}, errors.Errorf(errUnknownSelectorMode, selector.Mode)
 	}
 
 	envConfigs := make([]corev1.ObjectReference, len(ec))
@@ -212,9 +214,9 @@ func sortConfigs(ec []v1alpha1.EnvironmentConfig, f string) error {
 			err = e
 			return false
 		}
+
 		vt1 := reflect.TypeOf(v1).Kind()
 		vt2 := reflect.TypeOf(v2).Kind()
-
 		switch {
 		case vt1 == reflect.Float64 && vt2 == reflect.Float64:
 			return v1.(float64) < v2.(float64)
@@ -223,9 +225,9 @@ func sortConfigs(ec []v1alpha1.EnvironmentConfig, f string) error {
 		case vt1 == reflect.String && vt2 == reflect.String:
 			return v1.(string) < v2.(string)
 		case vt1 != vt2:
-			err = fmt.Errorf("not matching types: %T : %T", v1, v2)
+			err = errors.Errorf(errSortNotMatchingTypes, v1, v2)
 		default:
-			err = fmt.Errorf("unexpected type %T", v1)
+			err = errors.Errorf(errSortUnknownType, v1)
 		}
 		return false
 	})
