@@ -92,11 +92,11 @@ func (s *APIEnvironmentSelector) SelectEnvironment(ctx context.Context, cr resou
 			idx++
 		case v1.EnvironmentSourceTypeSelector:
 
-			ml, err := s.lookUpConfigs(ctx, cr, src.Selector.MatchLabels)
+			ec, err := s.lookUpConfigs(ctx, cr, src.Selector.MatchLabels)
 			if err != nil {
 				return errors.Wrapf(err, errFmtReferenceEnvironmentConfig, i)
 			}
-			r, err := s.buildEnvironmentConfigRefFromSelector(ml, src.Selector)
+			r, err := s.buildEnvironmentConfigRefFromSelector(ec, src.Selector)
 			if err != nil {
 				return errors.Wrapf(err, errFmtReferenceEnvironmentConfig, i)
 			}

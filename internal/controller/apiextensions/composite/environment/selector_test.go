@@ -905,7 +905,7 @@ func TestSelect(t *testing.T) {
 				err: errors.Wrap(fmt.Errorf("not matching types: int64 : float64"), "failed to build reference at index 0"),
 			},
 		},
-		"ErrSelectOnNotUnexpectedType": {
+		"ErrSelectOnUnexpectedType": {
 			reason: "It should return error when compared values have unexpected types",
 			args: args{
 				kube: &test.MockClient{
