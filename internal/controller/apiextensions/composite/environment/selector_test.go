@@ -398,7 +398,7 @@ func TestSelect(t *testing.T) {
 			},
 		},
 		"NoReferenceOnKubeListEmpty": {
-			reason: "It should return an error if kube.List returns an empty list.",
+			reason: "It should return an empty list of references if kube.List returns an empty list.",
 			args: args{
 				kube: &test.MockClient{
 					MockList: test.NewMockListFn(nil),
