@@ -34,6 +34,17 @@ import (
 // extensions (i.e. Composition, XRDs, etc).
 const LabelAreaAPIExtensions = "apiextensions"
 
+const CrossplaneConfigPresetWithCompositionSchemaValidation = "composition-webhook-schema-validation"
+
+func init() {
+	e2eConfig.AddPreset(CrossplaneConfigPresetWithCompositionSchemaValidation, "",
+		WithHelmOptions(
+			e2eConfig.shouldInstallCrossplane, helm.WithArgs(
+				"--set args={--debug,--enable-composition-webhook-schema-validation}",
+			)),
+	)
+}
+
 // TestCompositionMinimal tests Crossplane's Composition functionality,
 // checking that a claim using a very minimal Composition (with no patches,
 // transforms, or functions) will become available when its composed
@@ -106,6 +117,9 @@ func TestCompositionPatchAndTransform(t *testing.T) {
 }
 
 func TestCompositionValidation(t *testing.T) {
+	if e2eConfig.GetInstallCrossplaneConfig() != CrossplaneConfigPresetWithCompositionSchemaValidation {
+		t.Skip("Skipping test because composition schema validation is not enabled")
+	}
 	manifests := "test/e2e/manifests/apiextensions/composition/validation"
 
 	cases := features.Table{
@@ -131,7 +145,7 @@ func TestCompositionValidation(t *testing.T) {
 			WithLabel(LabelModifyCrossplaneInstallation, LabelModifyCrossplaneInstallationTrue).
 			// Enable our feature flag.
 			WithSetup("EnableAlphaCompositionValidation", funcs.AllOf(
-				funcs.AsFeaturesFunc(funcs.HelmUpgrade(HelmOptions(helm.WithArgs("--set args={--debug,--enable-composition-webhook-schema-validation}"))...)),
+				funcs.AsFeaturesFunc(funcs.HelmUpgrade(e2eConfig.GetHelmInstallOpts()...)),
 				funcs.ReadyToTestWithin(1*time.Minute, namespace),
 			)).
 			WithSetup("CreatePrerequisites", funcs.AllOf(
@@ -150,7 +164,7 @@ func TestCompositionValidation(t *testing.T) {
 			)).
 			// Disable our feature flag.
 			WithTeardown("DisableAlphaCompositionValidation", funcs.AllOf(
-				funcs.AsFeaturesFunc(funcs.HelmUpgrade(HelmOptions()...)),
+				funcs.AsFeaturesFunc(funcs.HelmUpgrade(e2eConfig.GetHelmInstallOpts()...)),
 				funcs.ReadyToTestWithin(1*time.Minute, namespace),
 			)).
 			Feature(),

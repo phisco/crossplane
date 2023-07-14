@@ -17,6 +17,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,12 +39,39 @@ import (
 	"github.com/crossplane/crossplane/test/e2e/utils"
 )
 
+// LabelAreaXFN is applied to all 'features' pertaining to managing Crossplane's
+// Composition Functions (XFN).
+const (
+	LabelAreaXFN = "xfn"
+
+	imgxfn                        = "crossplane-e2e/xfn:latest"
+	CrossplaneConfigPresetWithXFN = "with-xfn-enabled"
+)
+
+func init() {
+	e2eConfig.AddPreset(LabelAreaXFN, "",
+		WithHelmOptions(
+			e2eConfig.shouldInstallCrossplane, helm.WithArgs(
+				"--set args={--debug,--enable-composition-functions}",
+				"--set xfn.enabled=true",
+				"--set xfn.args={--debug}",
+				"--set xfn.image.repository="+strings.Split(imgxfn, ":")[0],
+				"--set xfn.image.tag="+strings.Split(imgxfn, ":")[1],
+			)),
+		WithAdditionalSetup(e2eConfig.shouldLoadImagesToKindCluster, envfuncs.LoadDockerImageToCluster(e2eConfig.GetClusterName(), imgxfn)))
+}
+
 func TestXfnRunnerImagePull(t *testing.T) {
+	if e2eConfig.GetInstallCrossplaneConfig() != CrossplaneConfigPresetWithCompositionSchemaValidation {
+		t.Skip("Skipping test because composition schema validation is not enabled")
+	}
 
 	manifests := "test/e2e/manifests/xfnrunner/private-registry/pull"
 	environment.Test(t,
 		features.New("PullFnImageFromPrivateRegistryWithCustomCert").
-			WithLabel(LabelArea, "xfn").
+			WithLabel(LabelArea, LabelAreaXFN).
+			WithLabel(LabelSize, LabelSizeLarge).
+			WithLabel(LabelModifyCrossplaneInstallation, LabelModifyCrossplaneInstallationTrue).
 			WithSetup("InstallRegistryWithCustomTlsCertificate",
 				funcs.AllOf(
 					funcs.AsFeaturesFunc(envfuncs.CreateNamespace("reg")),
@@ -144,19 +172,15 @@ func TestXfnRunnerImagePull(t *testing.T) {
 				}
 				return ctx
 			}).
-			WithSetup("CrossplaneDeployedWithFunctionsEnabled", funcs.AllOf(
+			WithSetup("CrossplaneDeployedWithRegistryEnabled", funcs.AllOf(
 				funcs.AsFeaturesFunc(funcs.HelmUpgrade(
-					HelmOptions(
-						helm.WithArgs(
-							"--set args={--debug,--enable-composition-functions}",
-							"--set xfn.enabled=true",
-							"--set xfn.args={--debug}",
-							"--set registryCaBundleConfig.name=reg-ca",
-							"--set registryCaBundleConfig.key=domain.crt",
-							"--set xfn.resources.requests.cpu=100m",
-							"--set xfn.resources.limits.cpu=100m",
-						),
-						helm.WithWait())...)),
+					e2eConfig.GetHelmInstallOpts(helm.WithArgs(
+						"--set registryCaBundleConfig.name=reg-ca",
+						"--set registryCaBundleConfig.key=domain.crt",
+						"--set xfn.resources.requests.cpu=100m",
+						"--set xfn.resources.limits.cpu=100m",
+					))...,
+				)),
 				funcs.ReadyToTestWithin(1*time.Minute, namespace),
 			)).
 			WithSetup("ProviderNopDeployed", funcs.AllOf(
@@ -234,7 +258,7 @@ func TestXfnRunnerImagePull(t *testing.T) {
 				},
 			)).
 			WithTeardown("CrossplaneDeployedWithoutFunctionsEnabled", funcs.AllOf(
-				funcs.AsFeaturesFunc(funcs.HelmUpgrade(HelmOptions()...)),
+				funcs.AsFeaturesFunc(funcs.HelmUpgrade(e2eConfig.GetHelmInstallOpts()...)),
 				funcs.ReadyToTestWithin(1*time.Minute, namespace),
 			)).
 			Feature(),

@@ -125,7 +125,7 @@ func TestCrossplaneLifecycle(t *testing.T) {
 			)).
 			Assess("ClaimIsAvailable", funcs.ResourcesHaveConditionWithin(2*time.Minute, manifests, "claim.yaml", xpv1.Available())).
 			Assess("UpgradeCrossplane", funcs.AllOf(
-				funcs.AsFeaturesFunc(funcs.HelmUpgrade(HelmOptions()...)),
+				funcs.AsFeaturesFunc(funcs.HelmUpgrade(e2eConfig.GetHelmInstallOpts()...)),
 				funcs.ReadyToTestWithin(1*time.Minute, namespace),
 			)).
 			Assess("CoreDeploymentIsAvailable", funcs.DeploymentBecomesAvailableWithin(1*time.Minute, namespace, "crossplane")).
