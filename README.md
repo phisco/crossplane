@@ -94,3 +94,5 @@ Crossplane is under the Apache 2.0 license.
 [releases]: https://github.com/crossplane/crossplane/releases
 [ADOPTERS.md]: ADOPTERS.md
 [Crossplane Roadmap]: https://github.com/orgs/crossplane/projects/20/views/3
+
+bla bla bla
