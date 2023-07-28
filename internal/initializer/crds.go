@@ -22,18 +22,13 @@ import (
 	"github.com/spf13/afero"
 	corev1 "k8s.io/api/core/v1"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/parser"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
-
-	v1 "github.com/crossplane/crossplane/apis/apiextensions/v1"
 )
 
 // Error strings.
@@ -96,39 +91,6 @@ func (c *CoreCRDs) Run(ctx context.Context, kube client.Client) error { //nolint
 			return errors.Errorf(errFmtNoTLSCrtInSecret, c.WebhookTLSSecretRef.String())
 		}
 		caBundle = s.Data["tls.crt"]
-	}
-
-	// Update storage version of composition revision CRs in etcd. Only after that remove v1alpha1 from CRD.
-	var compRevCRD extv1.CustomResourceDefinition
-	if err := kube.Get(ctx, client.ObjectKey{Name: "compositionrevisions.apiextensions.crossplane.io"}, &compRevCRD); err != nil && !kerrors.IsNotFound(err) {
-		return errors.Wrap(err, "cannot get composition revision crd")
-	} else if err == nil && sets.NewString(compRevCRD.Status.StoredVersions...).Has("v1alpha1") {
-		var revs v1.CompositionRevisionList
-		if err := kube.List(ctx, &revs); err != nil {
-			return errors.Wrap(err, "cannot list composition revisions")
-		}
-		for _, rev := range revs.Items {
-			// apply empty patch for storage version upgrade
-			if err := kube.Patch(ctx, &rev, client.RawPatch(types.MergePatchType, []byte(`"{}"`))); err != nil {
-				return errors.Wrapf(err, "cannot patch composition revision %q", rev.GetName())
-			}
-		}
-		var storageVersion string
-		for _, v := range compRevCRD.Spec.Versions {
-			if v.Storage {
-				storageVersion = v.Name
-				break
-			}
-		}
-		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			if err := kube.Get(ctx, client.ObjectKey{Name: "compositionrevisions.apiextensions.crossplane.io"}, &compRevCRD); err != nil {
-				return errors.Wrap(err, "cannot get composition revision crd")
-			}
-			compRevCRD.Status.StoredVersions = []string{storageVersion}
-			return kube.Update(ctx, &compRevCRD)
-		}); err != nil {
-			return errors.Wrap(err, "cannot update composition revision crd")
-		}
 	}
 
 	r, err := parser.NewFsBackend(c.fs,
