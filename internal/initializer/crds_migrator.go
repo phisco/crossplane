@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Crossplane Authors.
+Copyright 2023 The Crossplane Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
@@ -93,14 +92,20 @@ func (c *CoreCRDsMigrator) Run(ctx context.Context, kube client.Client) error { 
 			break
 		}
 	}
-	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		if err := kube.Get(ctx, client.ObjectKey{Name: c.crdName}, &crd); err != nil {
-			return errors.Wrapf(err, "cannot get %s crd", c.crdName)
-		}
-		crd.Status.StoredVersions = []string{storageVersion}
-		return kube.Status().Update(ctx, &crd)
-	}); err != nil {
+
+	origCrd := crd.DeepCopy()
+	crd.Status.StoredVersions = []string{storageVersion}
+	if err := kube.Status().Patch(ctx, &crd, client.MergeFrom(origCrd)); err != nil {
 		return errors.Wrapf(err, "couldn't update %s crd", c.crdName)
 	}
+
+	// One more check just to be sure we actually updated the crd
+	if err := kube.Get(ctx, client.ObjectKey{Name: c.crdName}, &crd); err != nil {
+		return errors.Wrapf(err, "cannot get %s crd to check", c.crdName)
+	}
+	if !sets.NewString(crd.Status.StoredVersions...).Has(storageVersion) {
+		return errors.Errorf("couldn't update %s crd", c.crdName)
+	}
+
 	return nil
 }
