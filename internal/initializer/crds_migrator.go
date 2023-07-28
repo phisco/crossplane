@@ -18,8 +18,6 @@ package initializer
 
 import (
 	"context"
-	"fmt"
-
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -99,25 +97,10 @@ func (c *CoreCRDsMigrator) Run(ctx context.Context, kube client.Client) error { 
 		if err := kube.Get(ctx, client.ObjectKey{Name: c.crdName}, &crd); err != nil {
 			return errors.Wrapf(err, "cannot get %s crd", c.crdName)
 		}
-		var foundStorageVersion bool
-		for i, v := range crd.Status.StoredVersions {
-			switch v {
-			case c.oldVersion:
-				// remove old version from the storedVersions
-				crd.Status.StoredVersions = append(crd.Status.StoredVersions[:i], crd.Status.StoredVersions[i+1:]...)
-			case storageVersion:
-				foundStorageVersion = true
-			}
-		}
-		if !foundStorageVersion {
-			// add new storage version to the storedVersions
-			crd.Status.StoredVersions = append([]string{storageVersion}, crd.Status.StoredVersions...)
-		}
-
+		crd.Status.StoredVersions = []string{storageVersion}
 		return kube.Status().Update(ctx, &crd)
 	}); err != nil {
 		return errors.Wrapf(err, "couldn't update %s crd", c.crdName)
 	}
-	fmt.Printf("HERE: updated %s crd storage version to %s\n", c.crdName, storageVersion)
 	return nil
 }
