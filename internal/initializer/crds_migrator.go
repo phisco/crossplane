@@ -55,30 +55,13 @@ func (c *CoreCRDsMigrator) Run(ctx context.Context, kube client.Client) error { 
 			// nothing to do
 			return nil
 		}
-		return errors.Wrap(err, "cannot get composition revision crd")
+		return errors.Wrapf(err, "cannot get %s crd", c.crdName)
 	}
-	fmt.Printf("HERE: found crd %s, storedVersions: %v\n", c.crdName, crd.Status.StoredVersions)
+	// no old version in the crd, nothing to do
 	if !sets.NewString(crd.Status.StoredVersions...).Has(c.oldVersion) {
 		return nil
 	}
-	var resources = unstructured.UnstructuredList{}
-	resources.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   crd.Spec.Group,
-		Version: c.oldVersion,
-		Kind:    crd.Spec.Names.ListKind,
-	})
-	if err := kube.List(ctx, &resources); err != nil {
-		return errors.Wrapf(err, "cannot list %s", resources.GroupVersionKind().String())
-	}
-	fmt.Printf("HERE: found %d %s\n", len(resources.Items), resources.GroupVersionKind().String())
-	for i := range resources.Items {
-		// apply empty patch for storage version upgrade
-		res := resources.Items[i]
-		if err := kube.Patch(ctx, &res, client.RawPatch(types.MergePatchType, []byte(`{}`))); err != nil {
-			return errors.Wrapf(err, "cannot patch %s %q", crd.Spec.Names.Kind, res.GetName())
-		}
-	}
-	fmt.Printf("HERE: updated %d %s\n", len(resources.Items), resources.GroupVersionKind().String())
+	// we need to patch all resources to the new storage version
 	var storageVersion string
 	for _, v := range crd.Spec.Versions {
 		if v.Storage {
@@ -86,18 +69,52 @@ func (c *CoreCRDsMigrator) Run(ctx context.Context, kube client.Client) error { 
 			break
 		}
 	}
-	fmt.Printf("HERE: updating %s crd storage version to %s\n", c.crdName, storageVersion)
+	var resources = unstructured.UnstructuredList{}
+	resources.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   crd.Spec.Group,
+		Version: storageVersion,
+		Kind:    crd.Spec.Names.ListKind,
+	})
+	var continueToken string
+	for {
+		if err := kube.List(ctx, &resources,
+			client.Limit(500),
+			client.Continue(continueToken),
+		); err != nil {
+			return errors.Wrapf(err, "cannot list %s", resources.GroupVersionKind().String())
+		}
+		for i := range resources.Items {
+			// apply empty patch for storage version upgrade
+			res := resources.Items[i]
+			if err := kube.Patch(ctx, &res, client.RawPatch(types.MergePatchType, []byte(`{}`))); err != nil {
+				return errors.Wrapf(err, "cannot patch %s %q", crd.Spec.Names.Kind, res.GetName())
+			}
+		}
+		continueToken = resources.GetContinue()
+		if continueToken == "" {
+			break
+		}
+	}
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		if err := kube.Get(ctx, client.ObjectKey{Name: c.crdName}, &crd); err != nil {
 			return errors.Wrapf(err, "cannot get %s crd", c.crdName)
 		}
-		fmt.Printf("HERE: trying to update %s crd storage version from %v to %s\n", c.crdName, crd.Status.StoredVersions, storageVersion)
-		storedVersions := crd.Status.StoredVersions
-		crd.Status.StoredVersions = sets.NewString(storedVersions...).
-			Delete(c.oldVersion).
-			Insert(storageVersion).
-			List()
-		return kube.SubResource("status").Update(ctx, &crd)
+		var foundStorageVersion bool
+		for i, v := range crd.Status.StoredVersions {
+			switch v {
+			case c.oldVersion:
+				// remove old version from the storedVersions
+				crd.Status.StoredVersions = append(crd.Status.StoredVersions[:i], crd.Status.StoredVersions[i+1:]...)
+			case storageVersion:
+				foundStorageVersion = true
+			}
+		}
+		if !foundStorageVersion {
+			// add new storage version to the storedVersions
+			crd.Status.StoredVersions = append([]string{storageVersion}, crd.Status.StoredVersions...)
+		}
+
+		return kube.Status().Update(ctx, &crd)
 	}); err != nil {
 		return errors.Wrapf(err, "couldn't update %s crd", c.crdName)
 	}
