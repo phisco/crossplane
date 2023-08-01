@@ -18,23 +18,8 @@ limitations under the License.
 
 package xfn
 
-import (
-	"context"
-
-	"github.com/crossplane/crossplane-runtime/pkg/errors"
-
-	"github.com/crossplane/crossplane/apis/apiextensions/fn/proto/v1alpha1"
-)
-
-const errLinuxOnly = "containerized functions are only supported on Linux"
-
 // HasCapSetUID returns false on non-Linux.
 func HasCapSetUID() bool { return false }
 
 // HasCapSetGID returns false on non-Linux.
 func HasCapSetGID() bool { return false }
-
-// RunFunction returns an error on non-Linux.
-func (r *ContainerRunner) RunFunction(_ context.Context, _ *v1alpha1.RunFunctionRequest) (*v1alpha1.RunFunctionResponse, error) {
-	return nil, errors.New(errLinuxOnly)
-}

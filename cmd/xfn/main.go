@@ -30,22 +30,24 @@ import (
 	"github.com/crossplane/crossplane/cmd/xfn/spark"
 	"github.com/crossplane/crossplane/cmd/xfn/start"
 	"github.com/crossplane/crossplane/internal/version"
+	"github.com/crossplane/crossplane/internal/xfn/config"
 )
+
+// kongVars represent the kong variables associated with the CLI parser
+// required for the Registry default variable interpolation.
+var kongVars = kong.Vars{
+	"default_registry": name.DefaultRegistry,
+}
 
 type debugFlag bool
 type versionFlag bool
 
-// KongVars represent the kong variables associated with the CLI parser
-// required for the Registry default variable interpolation.
-var KongVars = kong.Vars{
-	"default_registry": name.DefaultRegistry,
-}
+// Command is the entrypoint for the CLI.
+var Command struct {
+	config.Global
 
-var cli struct {
-	Debug debugFlag `short:"d" help:"Print verbose logging statements."`
-
-	Version  versionFlag `short:"v" help:"Print version and quit."`
-	Registry string      `short:"r" help:"Default registry used to fetch containers when not specified in tag." default:"${default_registry}" env:"REGISTRY"`
+	Debug   debugFlag   `short:"d" help:"Print verbose logging statements."`
+	Version versionFlag `short:"v" help:"Print version and quit."`
 
 	Start start.Command `cmd:"" help:"Start listening for Composition Function runs over gRPC." default:"1"`
 	Run   run.Command   `cmd:"" help:"Run a Composition Function."`
@@ -72,12 +74,13 @@ func (v versionFlag) BeforeApply(app *kong.Kong) error { //nolint:unparam // Bef
 func main() {
 	zl := zap.New().WithName("xfn")
 
-	ctx := kong.Parse(&cli,
+	ctx := kong.Parse(&Command,
 		kong.Name("xfn"),
 		kong.Description("Crossplane Composition Functions."),
 		kong.BindTo(logging.NewLogrLogger(zl), (*logging.Logger)(nil)),
 		kong.UsageOnError(),
-		KongVars,
+		kongVars,
 	)
-	ctx.FatalIfErrorf(ctx.Run(&start.Args{Registry: cli.Registry}))
+
+	ctx.FatalIfErrorf(ctx.Run(&Command.Global))
 }

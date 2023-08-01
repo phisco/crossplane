@@ -19,24 +19,26 @@ limitations under the License.
 package start
 
 import (
+	"net"
 	"os"
 	"path/filepath"
+
+	"google.golang.org/grpc"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
 	"github.com/crossplane/crossplane/internal/xfn"
+	"github.com/crossplane/crossplane/internal/xfn/config"
+	"github.com/crossplane/crossplane/internal/xfn/v1alpha1"
+	"github.com/crossplane/crossplane/internal/xfn/v1beta1"
 )
 
 // Error strings
 const (
-	errListenAndServe = "cannot listen for and serve gRPC API"
+	errListen = "cannot listen for gRPC connections"
+	errServe  = "cannot serve gRPC API"
 )
-
-// Args contains the default registry used to pull XFN containers.
-type Args struct {
-	Registry string
-}
 
 // Command starts a gRPC API to run Composition Functions.
 type Command struct {
@@ -48,7 +50,7 @@ type Command struct {
 }
 
 // Run a Composition Function gRPC API.
-func (c *Command) Run(args *Args, log logging.Logger) error {
+func (c *Command) Run(global *config.Global, log logging.Logger) error {
 	// If we don't have CAP_SETUID or CAP_SETGID, we'll only be able to map our
 	// own UID and GID to root inside the user namespace.
 	rootUID := os.Getuid()
@@ -60,11 +62,35 @@ func (c *Command) Run(args *Args, log logging.Logger) error {
 	}
 
 	// TODO(negz): Expose a healthz endpoint and otel metrics.
-	f := xfn.NewContainerRunner(
-		xfn.SetUID(setuid),
-		xfn.MapToRoot(rootUID, rootGID),
-		xfn.WithCacheDir(filepath.Clean(c.CacheDir)),
-		xfn.WithLogger(log),
-		xfn.WithRegistry(args.Registry))
-	return errors.Wrap(f.ListenAndServe(c.Network, c.Address), errListenAndServe)
+	fv1alpha1 := v1alpha1.NewContainerRunner(
+		v1alpha1.SetUID(setuid),
+		v1alpha1.MapToRoot(rootUID, rootGID),
+		v1alpha1.WithCacheDir(filepath.Clean(c.CacheDir)),
+		v1alpha1.WithLogger(log),
+		v1alpha1.WithRegistry(global.Registry))
+	fv1beta1 := v1beta1.NewContainerRunner(
+		v1beta1.SetUID(setuid),
+		v1beta1.MapToRoot(rootUID, rootGID),
+		v1beta1.WithCacheDir(filepath.Clean(c.CacheDir)),
+		v1beta1.WithLogger(log),
+		v1beta1.WithRegistry(global.Registry),
+		v1beta1.WithDefaultImage(global.Image),
+	)
+
+	log.Debug("Listening", "network", c.Network, "address", c.Address)
+	lis, err := net.Listen(c.Network, c.Address)
+	if err != nil {
+		return errors.Wrap(err, errListen)
+	}
+
+	// TODO(negz): Limit concurrent function runs?
+	srv := grpc.NewServer()
+	if err := fv1alpha1.Register(srv); err != nil {
+		return errors.Wrap(err, "cannot register v1alpha1")
+	}
+	if err := fv1beta1.Register(srv); err != nil {
+		return errors.Wrap(err, "cannot register v1beta1")
+	}
+
+	return errors.Wrap(srv.Serve(lis), errServe)
 }

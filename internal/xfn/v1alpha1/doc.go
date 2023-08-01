@@ -1,5 +1,3 @@
-//go:build !unix
-
 /*
 Copyright 2022 The Crossplane Authors.
 
@@ -16,17 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package xfn
-
-import (
-	"os/exec"
-
-	"github.com/crossplane/crossplane-runtime/pkg/errors"
-)
-
-const errLinuxOnly = "containerized functions are only supported on Linux"
-
-// StdioPipes returns an error on non-Linux.
-func StdioPipes(cmd *exec.Cmd, uid, gid int) (*Stdio, error) {
-	return nil, errors.New(errLinuxOnly)
-}
+// Package v1alpha1 is the reference implementation of Composition Functions.
+package v1alpha1

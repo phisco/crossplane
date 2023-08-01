@@ -19,6 +19,7 @@ package run
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"time"
@@ -30,8 +31,11 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 
 	"github.com/crossplane/crossplane/apis/apiextensions/fn/proto/v1alpha1"
-	"github.com/crossplane/crossplane/cmd/xfn/start"
+	v1beta12 "github.com/crossplane/crossplane/apis/apiextensions/fn/proto/v1beta1"
 	"github.com/crossplane/crossplane/internal/xfn"
+	"github.com/crossplane/crossplane/internal/xfn/config"
+	v1alpha12 "github.com/crossplane/crossplane/internal/xfn/v1alpha1"
+	"github.com/crossplane/crossplane/internal/xfn/v1beta1"
 )
 
 // Error strings
@@ -55,12 +59,11 @@ type Command struct {
 	// TODO(negz): filecontent appears to take multiple args when it does not.
 	// Bump kong once https://github.com/alecthomas/kong/issues/346 is fixed.
 
-	Image      string `arg:"" help:"OCI image to run."`
-	FunctionIO []byte `arg:"" help:"YAML encoded FunctionIO to pass to the function." type:"filecontent"`
+	Input []byte `arg:"" help:"YAML encoded FunctionIO to pass to the function." type:"filecontent"`
 }
 
 // Run a Composition container function.
-func (c *Command) Run(args *start.Args) error {
+func (c *Command) Run(global *config.Global) error { //nolint:gocyclo // the complexity is in the switch statement
 	// If we don't have CAP_SETUID or CAP_SETGID, we'll only be able to map our
 	// own UID and GID to root inside the user namespace.
 	rootUID := os.Getuid()
@@ -71,7 +74,7 @@ func (c *Command) Run(args *start.Args) error {
 		rootGID = c.MapRootGID
 	}
 
-	ref, err := name.ParseReference(c.Image, name.WithDefaultRegistry(args.Registry))
+	ref, err := name.ParseReference(global.Image, name.WithDefaultRegistry(global.Registry))
 	if err != nil {
 		return errors.Wrap(err, errParseImage)
 	}
@@ -91,32 +94,48 @@ func (c *Command) Run(args *start.Args) error {
 		return errors.Wrap(err, errAuthCfg)
 	}
 
-	f := xfn.NewContainerRunner(xfn.SetUID(setuid), xfn.MapToRoot(rootUID, rootGID), xfn.WithCacheDir(filepath.Clean(c.CacheDir)), xfn.WithRegistry(args.Registry))
-	rsp, err := f.RunFunction(context.Background(), &v1alpha1.RunFunctionRequest{
-		Image: c.Image,
-		Input: c.FunctionIO,
-		ImagePullConfig: &v1alpha1.ImagePullConfig{
-			PullPolicy: pullPolicy(c.ImagePullPolicy),
-			Auth: &v1alpha1.ImagePullAuth{
-				Username:      a.Username,
-				Password:      a.Password,
-				Auth:          a.Auth,
-				IdentityToken: a.IdentityToken,
-				RegistryToken: a.RegistryToken,
+	var output []byte
+	switch global.APIVersion {
+	case "v1alpha1":
+		f := v1alpha12.NewContainerRunner(v1alpha12.SetUID(setuid), v1alpha12.MapToRoot(rootUID, rootGID), v1alpha12.WithCacheDir(filepath.Clean(c.CacheDir)), v1alpha12.WithRegistry(global.Registry))
+		rsp, err := f.RunFunction(context.Background(), &v1alpha1.RunFunctionRequest{
+			Image: global.Image,
+			Input: c.Input,
+			ImagePullConfig: &v1alpha1.ImagePullConfig{
+				PullPolicy: pullPolicy(c.ImagePullPolicy),
+				Auth: &v1alpha1.ImagePullAuth{
+					Username:      a.Username,
+					Password:      a.Password,
+					Auth:          a.Auth,
+					IdentityToken: a.IdentityToken,
+					RegistryToken: a.RegistryToken,
+				},
 			},
-		},
-		RunFunctionConfig: &v1alpha1.RunFunctionConfig{
-			Timeout: durationpb.New(c.Timeout),
-			Network: &v1alpha1.NetworkConfig{
-				Policy: networkPolicy(c.NetworkPolicy),
+			RunFunctionConfig: &v1alpha1.RunFunctionConfig{
+				Timeout: durationpb.New(c.Timeout),
+				Network: &v1alpha1.NetworkConfig{
+					Policy: networkPolicy(c.NetworkPolicy),
+				},
 			},
-		},
-	})
-	if err != nil {
-		return errors.Wrap(err, errRunFunction)
+		})
+		if err != nil {
+			return errors.Wrap(err, errRunFunction)
+		}
+		output = rsp.GetOutput()
+	case "v1beta1":
+		var req v1beta12.RunFunctionRequest
+		if err := json.Unmarshal(c.Input, &req); err != nil {
+			return errors.Wrap(err, errWriteFIO)
+		}
+		f := v1beta1.NewContainerRunner(v1beta1.SetUID(setuid), v1beta1.MapToRoot(rootUID, rootGID), v1beta1.WithCacheDir(filepath.Clean(c.CacheDir)), v1beta1.WithRegistry(global.Registry))
+		rsp, err := f.RunFunction(context.Background(), &req)
+		if err != nil {
+			return errors.Wrap(err, errRunFunction)
+		}
+		output = []byte(rsp.String())
 	}
+	_, err = os.Stdout.Write(output)
 
-	_, err = os.Stdout.Write(rsp.GetOutput())
 	return errors.Wrap(err, errWriteFIO)
 }
 

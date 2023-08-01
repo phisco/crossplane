@@ -1,4 +1,4 @@
-//go:build !unix
+//go:build !linux
 
 /*
 Copyright 2022 The Crossplane Authors.
@@ -16,17 +16,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package xfn
+package v1beta1
 
 import (
-	"os/exec"
+	"context"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
+
+	"github.com/crossplane/crossplane/apis/apiextensions/fn/proto/v1beta1"
 )
 
 const errLinuxOnly = "containerized functions are only supported on Linux"
 
-// StdioPipes returns an error on non-Linux.
-func StdioPipes(cmd *exec.Cmd, uid, gid int) (*Stdio, error) {
+// RunFunction returns an error on non-Linux.
+func (r *ContainerRunner) RunFunction(_ context.Context, _ *v1beta1.RunFunctionRequest) (*v1beta1.RunFunctionResponse, error) {
 	return nil, errors.New(errLinuxOnly)
 }

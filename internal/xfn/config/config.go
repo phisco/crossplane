@@ -1,5 +1,3 @@
-//go:build !unix
-
 /*
 Copyright 2022 The Crossplane Authors.
 
@@ -16,17 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package xfn
+// Package config contains the CLI configuration.
+package config
 
-import (
-	"os/exec"
-
-	"github.com/crossplane/crossplane-runtime/pkg/errors"
-)
-
-const errLinuxOnly = "containerized functions are only supported on Linux"
-
-// StdioPipes returns an error on non-Linux.
-func StdioPipes(cmd *exec.Cmd, uid, gid int) (*Stdio, error) {
-	return nil, errors.New(errLinuxOnly)
+// Global contains the Global CLI options.
+type Global struct {
+	Registry   string `short:"r" help:"Default registry used to fetch containers when not specified in tag." default:"${default_registry}" env:"REGISTRY"`
+	Image      string `short:"i" help:"Default image used to fetch containers when not specified in tag." env:"IMAGE"`
+	APIVersion string `help:"ApiVersion to use." enum:"v1alpha1,v1beta1" default:"v1alpha1"`
 }

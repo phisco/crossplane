@@ -1,109 +1,58 @@
-/*
-Copyright 2022 The Crossplane Authors.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
-// Package spark runs a Composition Function. It is designed to be run as root
-// inside an unprivileged user namespace.
 package spark
 
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/uuid"
 	runtime "github.com/opencontainers/runtime-spec/specs-go"
-	"google.golang.org/protobuf/proto"
+	proto2 "google.golang.org/protobuf/proto"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 
-	"github.com/crossplane/crossplane/apis/apiextensions/fn/proto/v1alpha1"
+	"github.com/crossplane/crossplane/apis/apiextensions/fn/proto/v1beta1"
 	"github.com/crossplane/crossplane/internal/oci"
 	"github.com/crossplane/crossplane/internal/oci/spec"
 	"github.com/crossplane/crossplane/internal/oci/store"
 	"github.com/crossplane/crossplane/internal/oci/store/overlay"
 	"github.com/crossplane/crossplane/internal/oci/store/uncompressed"
 	"github.com/crossplane/crossplane/internal/xfn/config"
+	v1beta12 "github.com/crossplane/crossplane/internal/xfn/v1beta1"
+	"github.com/crossplane/crossplane/internal/xfn/v1beta1/proto"
 )
 
-// Error strings.
-const (
-	errReadRequest      = "cannot read request from stdin"
-	errUnmarshalRequest = "cannot unmarshal request data from stdin"
-	errNewBundleStore   = "cannot create OCI runtime bundle store"
-	errNewDigestStore   = "cannot create OCI image digest store"
-	errParseRef         = "cannot parse OCI image reference"
-	errPull             = "cannot pull OCI image"
-	errBundleFn         = "cannot create OCI runtime bundle"
-	errMkRuntimeRootdir = "cannot make OCI runtime cache"
-	errRuntime          = "OCI runtime error"
-	errCleanupBundle    = "cannot cleanup OCI runtime bundle"
-	errMarshalResponse  = "cannot marshal response data to stdout"
-	errWriteResponse    = "cannot write response data to stdout"
-	errCPULimit         = "cannot limit container CPU"
-	errMemoryLimit      = "cannot limit container memory"
-	errHostNetwork      = "cannot configure container to run in host network namespace"
-)
-
-// The path within the cache dir that the OCI runtime should use for its
-// '--root' cache.
-const ociRuntimeRoot = "runtime"
-
-// The time after which the OCI runtime will be killed if none is specified in
-// the RunFunctionRequest.
-const defaultTimeout = 25 * time.Second
-
-// Command runs a containerized Composition Function.
-type Command struct {
-	CacheDir      string `short:"c" help:"Directory used for caching function images and containers." default:"/xfn"`
-	Runtime       string `help:"OCI runtime binary to invoke." default:"crun"`
-	MaxStdioBytes int64  `help:"Maximum size of stdout and stderr for functions." default:"0"`
-	CABundlePath  string `help:"Additional CA bundle to use when fetching function images from registry." env:"CA_BUNDLE_PATH"`
-}
-
-// Run a Composition Function inside an unprivileged user namespace. Reads a
-// protocol buffer serialized RunFunctionRequest from stdin, and writes a
-// protocol buffer serialized RunFunctionResponse to stdout.
-func (c *Command) Run(global *config.Global) error {
-	switch global.APIVersion {
-	case "v1alpha1":
-		return c.runv1alpha1(global)
-	case "v1beta1":
-		return c.runv1beta1(global)
-	default:
-		return errors.Errorf("unknown API version %s", global.APIVersion)
-	}
-}
-
-func (c *Command) runv1alpha1(global *config.Global) error { //nolint:gocyclo // TODO(negz): Refactor some of this out into functions, add tests.
+func (c *Command) runv1beta1(args *config.Global) error { //nolint:gocyclo // TODO(negz): Refactor some of this out into functions, add tests.
 	pb, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return errors.Wrap(err, errReadRequest)
 	}
 
-	req := &v1alpha1.RunFunctionRequest{}
-	if err := proto.Unmarshal(pb, req); err != nil {
+	req := &v1beta1.RunFunctionRequest{}
+	if err := proto2.Unmarshal(pb, req); err != nil {
 		return errors.Wrap(err, errUnmarshalRequest)
 	}
 
-	t := req.GetRunFunctionConfig().GetTimeout().AsDuration()
+	input := req.GetInput()
+	if input == nil {
+		return errors.New("no input provided")
+	}
+
+	confJSON, err := input.MarshalJSON()
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal input to JSON")
+	}
+	var conf v1beta12.ContainerRunFunctionRequestConfig
+	if err := json.Unmarshal(confJSON, &conf); err != nil {
+		return errors.Wrapf(err, "failed to unmarshal input as config %s", string(confJSON))
+	}
+
+	t := conf.Spec.GetRunFunctionConfig().GetTimeout().AsDuration()
 	if t == 0 {
 		t = defaultTimeout
 	}
@@ -134,12 +83,12 @@ func (c *Command) runv1alpha1(global *config.Global) error { //nolint:gocyclo //
 		return errors.Wrap(err, errNewDigestStore)
 	}
 
-	r, err := name.ParseReference(req.GetImage(), name.WithDefaultRegistry(global.Registry))
+	r, err := name.ParseReference(conf.Spec.GetImage(), name.WithDefaultRegistry(args.Registry))
 	if err != nil {
 		return errors.Wrap(err, errParseRef)
 	}
 
-	opts := []oci.ImageClientOption{FromImagePullConfig(req.GetImagePullConfig())}
+	opts := []oci.ImageClientOption{FromImagePullConfigV1beta1(conf.Spec.GetImagePullConfig())}
 	if c.CABundlePath != "" {
 		rootCA, err := oci.ParseCertificatesFromPath(c.CABundlePath)
 		if err != nil {
@@ -158,7 +107,7 @@ func (c *Command) runv1alpha1(global *config.Global) error { //nolint:gocyclo //
 	}
 
 	// Create an OCI runtime bundle for this container run.
-	b, err := s.Bundle(ctx, img, runID, FromRunFunctionConfig(req.GetRunFunctionConfig()))
+	b, err := s.Bundle(ctx, img, runID, FromRunFunctionConfigV1beta1(conf.Spec.GetRunFunctionConfig()))
 	if err != nil {
 		return errors.Wrap(err, errBundleFn)
 	}
@@ -177,7 +126,12 @@ func (c *Command) runv1alpha1(global *config.Global) error { //nolint:gocyclo //
 
 	//nolint:gosec // Executing with user-supplied input is intentional.
 	cmd := exec.CommandContext(ctx, c.Runtime, "--root="+root, "run", "--bundle="+b.Path(), runID)
-	cmd.Stdin = bytes.NewReader(req.GetInput())
+	reqJSON, err := json.Marshal(req)
+	if err != nil {
+		_ = b.Cleanup()
+		return errors.Wrap(err, "failed to marshal request to JSON")
+	}
+	cmd.Stdin = bytes.NewReader(reqJSON)
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -219,32 +173,20 @@ func (c *Command) runv1alpha1(global *config.Global) error { //nolint:gocyclo //
 		return errors.Wrap(err, errCleanupBundle)
 	}
 
-	rsp := &v1alpha1.RunFunctionResponse{Output: stdout}
-	pb, err = proto.Marshal(rsp)
-	if err != nil {
-		return errors.Wrap(err, errMarshalResponse)
-	}
-	_, err = os.Stdout.Write(pb)
+	_, err = os.Stdout.Write(stdout)
 	return errors.Wrap(err, errWriteResponse)
 }
 
-func limitReaderIfNonZero(r io.Reader, limit int64) io.Reader {
-	if limit == 0 {
-		return r
-	}
-	return io.LimitReader(r, limit)
-}
-
-// FromImagePullConfig configures an image client with options derived from the
+// FromImagePullConfigV1beta1 configures an image client with options derived from the
 // supplied ImagePullConfig.
-func FromImagePullConfig(cfg *v1alpha1.ImagePullConfig) oci.ImageClientOption {
+func FromImagePullConfigV1beta1(cfg *proto.ImagePullConfig) oci.ImageClientOption {
 	return func(o *oci.ImageClientOptions) {
 		switch cfg.GetPullPolicy() {
-		case v1alpha1.ImagePullPolicy_IMAGE_PULL_POLICY_ALWAYS:
+		case proto.ImagePullPolicy_IMAGE_PULL_POLICY_ALWAYS:
 			oci.WithPullPolicy(oci.ImagePullPolicyAlways)(o)
-		case v1alpha1.ImagePullPolicy_IMAGE_PULL_POLICY_NEVER:
+		case proto.ImagePullPolicy_IMAGE_PULL_POLICY_NEVER:
 			oci.WithPullPolicy(oci.ImagePullPolicyNever)(o)
-		case v1alpha1.ImagePullPolicy_IMAGE_PULL_POLICY_IF_NOT_PRESENT, v1alpha1.ImagePullPolicy_IMAGE_PULL_POLICY_UNSPECIFIED:
+		case proto.ImagePullPolicy_IMAGE_PULL_POLICY_IF_NOT_PRESENT, proto.ImagePullPolicy_IMAGE_PULL_POLICY_UNSPECIFIED:
 			oci.WithPullPolicy(oci.ImagePullPolicyIfNotPresent)(o)
 		}
 		if a := cfg.GetAuth(); a != nil {
@@ -259,9 +201,9 @@ func FromImagePullConfig(cfg *v1alpha1.ImagePullConfig) oci.ImageClientOption {
 	}
 }
 
-// FromRunFunctionConfig extends a runtime spec with configuration derived from
+// FromRunFunctionConfigV1beta1 extends a runtime spec with configuration derived from
 // the supplied RunFunctionConfig.
-func FromRunFunctionConfig(cfg *v1alpha1.RunFunctionConfig) spec.Option {
+func FromRunFunctionConfigV1beta1(cfg *proto.RunFunctionConfig) spec.Option {
 	return func(s *runtime.Spec) error {
 		if l := cfg.GetResources().GetLimits().GetCpu(); l != "" {
 			if err := spec.WithCPULimit(l)(s); err != nil {
@@ -275,7 +217,7 @@ func FromRunFunctionConfig(cfg *v1alpha1.RunFunctionConfig) spec.Option {
 			}
 		}
 
-		if cfg.GetNetwork().GetPolicy() == v1alpha1.NetworkPolicy_NETWORK_POLICY_RUNNER {
+		if cfg.GetNetwork().GetPolicy() == proto.NetworkPolicy_NETWORK_POLICY_RUNNER {
 			if err := spec.WithHostNetwork()(s); err != nil {
 				return errors.Wrap(err, errHostNetwork)
 			}

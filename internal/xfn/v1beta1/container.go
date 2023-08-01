@@ -14,40 +14,41 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package xfn
+package v1beta1
 
 import (
-	"io"
-	"net"
-
 	"google.golang.org/grpc"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
-	"github.com/crossplane/crossplane/apis/apiextensions/fn/proto/v1alpha1"
-)
-
-// Error strings.
-const (
-	errListen = "cannot listen for gRPC connections"
-	errServe  = "cannot serve gRPC API"
+	"github.com/crossplane/crossplane/apis/apiextensions/fn/proto/v1beta1"
+	"github.com/crossplane/crossplane/internal/xfn/v1beta1/proto"
 )
 
 const defaultCacheDir = "/xfn"
 
+// ContainerRunFunctionRequestConfig is a request to run a Composition Function
+// packaged as an OCI image.
+type ContainerRunFunctionRequestConfig struct {
+	metav1.TypeMeta `json:",inline"`
+
+	Spec proto.ContainerRunFunctionRequestConfigSpec `json:"spec,omitempty"`
+}
+
 // An ContainerRunner runs a Composition Function packaged as an OCI image by
 // extracting it and running it as a 'rootless' container.
 type ContainerRunner struct {
-	v1alpha1.UnimplementedContainerizedFunctionRunnerServiceServer
+	v1beta1.UnimplementedFunctionRunnerServiceServer
 
 	log logging.Logger
 
-	rootUID  int
-	rootGID  int
-	setuid   bool // Specifically, CAP_SETUID and CAP_SETGID.
-	cache    string
-	registry string
+	rootUID      int
+	rootGID      int
+	setuid       bool // Specifically, CAP_SETUID and CAP_SETGID.
+	cache        string
+	registry     string
+	defaultImage *string
 }
 
 // A ContainerRunnerOption configures a new ContainerRunner.
@@ -68,6 +69,17 @@ func MapToRoot(uid, gid int) ContainerRunnerOption {
 func SetUID(s bool) ContainerRunnerOption {
 	return func(r *ContainerRunner) {
 		r.setuid = s
+	}
+}
+
+// WithDefaultImage specifies the default image that should be used to run
+// functions if no image is specified in the request.
+func WithDefaultImage(image string) ContainerRunnerOption {
+	return func(r *ContainerRunner) {
+		if image == "" {
+			return
+		}
+		r.defaultImage = &image
 	}
 }
 
@@ -106,23 +118,9 @@ func NewContainerRunner(o ...ContainerRunnerOption) *ContainerRunner {
 	return r
 }
 
-// ListenAndServe gRPC connections at the supplied address.
-func (r *ContainerRunner) ListenAndServe(network, address string) error {
-	r.log.Debug("Listening", "network", network, "address", address)
-	lis, err := net.Listen(network, address)
-	if err != nil {
-		return errors.Wrap(err, errListen)
-	}
-
+// Register the container runner with the supplied gRPC server.
+func (r *ContainerRunner) Register(srv *grpc.Server) error {
 	// TODO(negz): Limit concurrent function runs?
-	srv := grpc.NewServer()
-	v1alpha1.RegisterContainerizedFunctionRunnerServiceServer(srv, r)
-	return errors.Wrap(srv.Serve(lis), errServe)
-}
-
-// Stdio can be used to read and write a command's standard I/O.
-type Stdio struct {
-	Stdin  io.WriteCloser
-	Stdout io.ReadCloser
-	Stderr io.ReadCloser
+	v1beta1.RegisterFunctionRunnerServiceServer(srv, r)
+	return nil
 }
