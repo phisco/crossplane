@@ -79,7 +79,6 @@ const crdsDir = "cluster/crds"
 // Run `make build e2e-tag-images` to produce them
 const (
 	imgcore = "crossplane-e2e/crossplane:latest"
-	imgxfn  = "crossplane-e2e/xfn:latest"
 )
 
 const (
@@ -108,10 +107,6 @@ func HelmOptions(extra ...helm.Option) []helm.Option {
 			"--set args={--debug}",
 			"--set image.repository="+strings.Split(imgcore, ":")[0],
 			"--set image.tag="+strings.Split(imgcore, ":")[1],
-
-			"--set xfn.args={--debug}",
-			"--set xfn.image.repository="+strings.Split(imgxfn, ":")[0],
-			"--set xfn.image.tag="+strings.Split(imgxfn, ":")[1],
 		),
 	}
 	return append(o, extra...)
@@ -164,7 +159,6 @@ func TestMain(m *testing.M) {
 	if *load && isKindCluster {
 		setup = append(setup,
 			envfuncs.LoadDockerImageToCluster(clusterName, imgcore),
-			envfuncs.LoadDockerImageToCluster(clusterName, imgxfn),
 		)
 	}
 	if *install {

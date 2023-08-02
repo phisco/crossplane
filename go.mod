@@ -9,18 +9,14 @@ require (
 	github.com/alecthomas/kong v0.8.0
 	github.com/bufbuild/buf v1.25.0
 	github.com/crossplane/crossplane-runtime v0.20.0
-	github.com/cyphar/filepath-securejoin v0.2.3
 	github.com/google/go-cmp v0.5.9
 	github.com/google/go-containerregistry v0.15.3-0.20230625233257-b8504803389b
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20230617045147-2472cbbbf289
-	github.com/google/uuid v1.3.0
 	github.com/jmattheis/goverter v0.17.4
-	github.com/opencontainers/runtime-spec v1.1.0-rc.3.0.20230610073135-48415de180cf
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.9.5
 	golang.org/x/sync v0.3.0
-	golang.org/x/sys v0.10.0
 	google.golang.org/grpc v1.57.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
 	google.golang.org/protobuf v1.31.0
@@ -30,7 +26,6 @@ require (
 	k8s.io/client-go v0.27.3
 	k8s.io/code-generator v0.27.3
 	k8s.io/utils v0.0.0-20230505201702-9f6742963106
-	kernel.org/pub/linux/libs/security/libcap/cap v1.2.69
 	sigs.k8s.io/controller-runtime v0.15.0
 	sigs.k8s.io/controller-tools v0.12.1
 	sigs.k8s.io/e2e-framework v0.2.0
@@ -38,7 +33,12 @@ require (
 	sigs.k8s.io/yaml v1.3.0
 )
 
-require google.golang.org/genproto/googleapis/rpc v0.0.0-20230525234030-28d5490b6b19 // indirect
+require (
+	github.com/cyphar/filepath-securejoin v0.2.3 // indirect
+	github.com/google/uuid v1.3.0 // indirect
+	golang.org/x/sys v0.10.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20230525234030-28d5490b6b19 // indirect
+)
 
 require (
 	cloud.google.com/go/compute v1.19.3 // indirect
@@ -182,7 +182,6 @@ require (
 	k8s.io/gengo v0.0.0-20220902162205-c0856e24416d // indirect
 	k8s.io/klog/v2 v2.100.1
 	k8s.io/kube-openapi v0.0.0-20230525220651-2546d827e515 // indirect
-	kernel.org/pub/linux/libs/security/libcap/psx v1.2.69 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )
