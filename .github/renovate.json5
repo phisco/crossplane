@@ -69,6 +69,16 @@
       matchBaseBranches: [ "/^release-.*/"],
       enabled: false,
     }, {
+      "description": "Still get all patch updates to release branches though",
+      "matchBaseBranches": [ "/^release-.*/"],
+      "matchDatasources": [
+        "go"
+      ],
+      "matchUpdateTypes": [
+        "patch",
+      ],
+      enabled: true,
+    }, {
       "description": "Still update Docker images on release branches though",
       "matchDatasources": ["docker"],
       matchBaseBranches: [ "/^release-.*/"],
