@@ -346,8 +346,11 @@ func (c *PTFComposer) Compose(ctx context.Context, xr resource.Composite, req Co
 	// was passed to this method will have a stale meta.resourceVersion. This
 	// Subsequent attempts to update that object will therefore fail. This
 	// should be okay; the caller should keep trying until this is a no-op.
-	ao := mergeOptions(filterPatches(allPatches(state.ComposedResources), patchTypesToXR()...))
-	if err := c.client.Apply(ctx, state.Composite, ao...); err != nil {
+	patches := filterPatches(allPatches(state.ComposedResources), patchTypesToXR()...)
+	if req.Environment != nil && req.Revision.Spec.Environment != nil {
+		patches = append(patches, toXRPatchesFromEnvironment(req.Revision.Spec.Environment)...)
+	}
+	if err := c.client.Apply(ctx, state.Composite, mergeOptions(patches)...); err != nil {
 		return CompositionResult{}, errors.Wrap(err, errApplyXR)
 	}
 

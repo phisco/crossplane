@@ -18,6 +18,7 @@ package composite
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
@@ -292,7 +293,13 @@ func (c *PTComposer) Compose(ctx context.Context, xr resource.Composite, req Com
 	// and we'll proceed to update the status as soon as there are no changes to
 	// be made to the spec.
 	objCopy := xr.DeepCopyObject().(client.Object)
-	if err := c.client.Apply(ctx, objCopy, mergeOptions(toXRPatchesFromTAs(tas))...); err != nil {
+	patches := toXRPatchesFromTAs(tas)
+	if req.Environment != nil && req.Revision.Spec.Environment != nil {
+		fmt.Println("HERE: Retrieving environment patches", "before", len(patches))
+		patches = append(patches, toXRPatchesFromEnvironment(req.Revision.Spec.Environment)...)
+		fmt.Println("HERE: Retrieving environment patches", "after", len(patches))
+	}
+	if err := c.client.Apply(ctx, objCopy, mergeOptions(patches)...); err != nil {
 		return CompositionResult{}, errors.Wrap(err, errUpdate)
 	}
 
@@ -313,6 +320,25 @@ func toXRPatchesFromTAs(tas []TemplateAssociation) []v1.Patch {
 		filtered = append(filtered, filterPatches(ta.Template.Patches,
 			patchTypesToXR()...)...)
 	}
+	return filtered
+}
+
+// toXRPatchesFromEnvironment selects patches defined in the environment,
+// whose type is one of the XR-targeting patches
+// (e.g. v1.PatchTypeToCompositeFieldPath or v1.PatchTypeCombineToComposite)
+func toXRPatchesFromEnvironment(envConfig *v1.EnvironmentConfiguration) []v1.Patch {
+	ps := make([]v1.Patch, 0, len(envConfig.Patches))
+	for _, patch := range envConfig.Patches {
+		p := patch.ToPatch()
+		if p == nil {
+			// Should never happen, but just in case, it's better to skip it
+			// than panicking.
+			continue
+		}
+		ps = append(ps, *p)
+	}
+	filtered := filterPatches(ps,
+		patchTypesToXR()...)
 	return filtered
 }
 
