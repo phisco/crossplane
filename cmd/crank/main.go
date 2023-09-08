@@ -58,10 +58,11 @@ var cli struct {
 	Version versionFlag `short:"v" name:"version" help:"Print version and quit."`
 	Verbose verboseFlag `name:"verbose" help:"Print verbose logging statements."`
 
-	Build   buildCmd   `cmd:"" help:"Build Crossplane packages."`
-	Install installCmd `cmd:"" help:"Install Crossplane packages."`
-	Update  updateCmd  `cmd:"" help:"Update Crossplane packages."`
-	Push    pushCmd    `cmd:"" help:"Push Crossplane packages."`
+	Build       buildCmd       `cmd:"" help:"Build Crossplane packages."`
+	Install     installCmd     `cmd:"" help:"Install Crossplane packages."`
+	Update      updateCmd      `cmd:"" help:"Update Crossplane packages."`
+	Push        pushCmd        `cmd:"" help:"Push Crossplane packages."`
+	Environment environmentCmd `cmd:"" help:"Manage Crossplane's Composition's environments."`
 }
 
 func main() {
