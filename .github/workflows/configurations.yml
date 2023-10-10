@@ -12,7 +12,6 @@ env:
 jobs:
   setup:
     runs-on: ubuntu-22.04
-    if: github.repository == 'crossplane/crossplane'
     steps:
       - name: Checkout
         uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4
@@ -27,7 +26,6 @@ jobs:
 
   build-crossplane-cli:
     runs-on: ubuntu-22.04
-    if: github.repository == 'crossplane/crossplane'
     steps:
       - name: Setup Go
         uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
@@ -49,7 +47,6 @@ jobs:
 
   build-and-push-configurations:
     runs-on: ubuntu-22.04
-    if: github.repository == 'crossplane/crossplane'
     needs: [ setup, build-crossplane-cli ]
     strategy:
       fail-fast: false
