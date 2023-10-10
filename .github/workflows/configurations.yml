@@ -2,9 +2,6 @@ name: Configurations
 
 on:
   push:
-    branches:
-      - master
-      - release-*
   workflow_dispatch: {}
 
 env:
