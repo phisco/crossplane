@@ -64,7 +64,7 @@ jobs:
           submodules: true
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@cbed621e49e4c01b044d60f6c80ea4ed6328b281 # v2
         with:
           name: crossplane-cli
           path: crank
