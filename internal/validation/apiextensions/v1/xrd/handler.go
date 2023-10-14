@@ -74,7 +74,7 @@ func getAllCRDsForXRD(in *v1.CompositeResourceDefinition) (out []*apiextv1.Custo
 	return out, nil
 }
 
-// ValidateCreate validates a Composition.
+// ValidateCreate validates a CompositeResourceDefinition creation.
 func (v *validator) ValidateCreate(ctx context.Context, obj runtime.Object) (warns admission.Warnings, err error) {
 	in, ok := obj.(*v1.CompositeResourceDefinition)
 	if !ok {
@@ -103,7 +103,7 @@ func (v *validator) ValidateCreate(ctx context.Context, obj runtime.Object) (war
 	return warns, nil
 }
 
-// ValidateUpdate implements the same logic as ValidateCreate.
+// ValidateUpdate validates a CompositeResourceDefinition update.
 func (v *validator) ValidateUpdate(ctx context.Context, old, new runtime.Object) (warns admission.Warnings, err error) {
 	// Validate the update
 	oldObj, ok := old.(*v1.CompositeResourceDefinition)
