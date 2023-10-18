@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"golang.org/x/exp/slices"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -18,6 +19,10 @@ const (
 	errCliOutput   = "cannot print output"
 )
 
+// describeAllowedFields are the fields that can be printed out in the header.
+// TODO(phisco): add fieldpath or jsonpath support, keeping well-known fields as defaults maybe.
+var describeAllowedFields = []string{"parent", "name", "kind", "namespace", "apiversion", "synced", "ready", "message", "event"}
+
 // describeCmd describes a Kubernetes Crossplane resource.
 type describeCmd struct {
 	Kind      string   `arg:"" required:"" help:"Kind of resource to describe."`
@@ -30,14 +35,9 @@ type describeCmd struct {
 func (c *describeCmd) Run(logger logging.Logger) error {
 	logger = logger.WithValues("Kind", c.Kind, "Name", c.Name)
 
-	AllowedFields := []string{"parent", "name", "kind", "namespace", "apiversion", "synced", "ready", "message", "event"}
-
-	// Check if fields are valid
-	for _, field := range c.Fields {
-		if !slices.Contains(AllowedFields, field) {
-			logger.Debug("Invalid field set", "invalidField", field)
-			return fmt.Errorf("Invalid field set: %s\nField has to be one of: %s", field, AllowedFields)
-		}
+	// Validate flags and arguments
+	if err := c.validate(); err != nil {
+		return errors.Wrap(err, "cannot validate fields")
 	}
 
 	// set kubeconfig
@@ -73,5 +73,15 @@ func (c *describeCmd) Run(logger logging.Logger) error {
 		return errors.Wrap(err, errCliOutput)
 	}
 
+	return nil
+}
+
+func (c *describeCmd) validate() error {
+	// Check if fields are valid
+	for _, field := range c.Fields {
+		if !slices.Contains(describeAllowedFields, strings.ToLower(field)) {
+			return fmt.Errorf("invalid field set %q, should be one of: %s", field, describeAllowedFields)
+		}
+	}
 	return nil
 }
