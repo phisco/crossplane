@@ -44,16 +44,16 @@ func cliTableAddResource(table *tablewriter.Table, fields []string, r Resource, 
 			tableRow[i] = parentPrefix
 		}
 		if field == "name" {
-			tableRow[i] = r.manifest.GetName()
+			tableRow[i] = r.Unstructured.GetName()
 		}
 		if field == "kind" {
-			tableRow[i] = r.manifest.GetKind()
+			tableRow[i] = r.Unstructured.GetKind()
 		}
 		if field == "namespace" {
-			tableRow[i] = r.manifest.GetNamespace()
+			tableRow[i] = r.Unstructured.GetNamespace()
 		}
 		if field == "apiversion" {
-			tableRow[i] = r.manifest.GetAPIVersion()
+			tableRow[i] = r.Unstructured.GetAPIVersion()
 		}
 		if field == "synced" {
 			tableRow[i] = r.GetConditionStatus("Synced")
@@ -73,8 +73,8 @@ func cliTableAddResource(table *tablewriter.Table, fields []string, r Resource, 
 	table.Append(tableRow)
 
 	// Recursively print children with the updated parent information.
-	for _, child := range r.Children {
-		err := cliTableAddResource(table, fields, *child, r.manifest.GetKind())
+	for _, child := range r.children {
+		err := cliTableAddResource(table, fields, *child, r.Unstructured.GetKind())
 		if err != nil {
 			return err
 		}

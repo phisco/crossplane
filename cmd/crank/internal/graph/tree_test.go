@@ -31,18 +31,18 @@ func TestCliTree(t *testing.T) {
 			reason: "CLI tree should be able to print Resource struct containing children",
 			args: args{
 				resource: Resource{
-					manifest:           DummyManifest("ObjectStorage", "test-resource", "True", "True"),
+					Unstructured:       DummyManifest("ObjectStorage", "test-resource", "True", "True"),
 					latestEventMessage: "Successfully selected composition",
-					Children: []*Resource{
+					children: []*Resource{
 						{
-							manifest: DummyManifest("XObjectStorage", "test-resource-hash", "True", "True"),
-							Children: []*Resource{
+							Unstructured: DummyManifest("XObjectStorage", "test-resource-hash", "True", "True"),
+							children: []*Resource{
 								{
-									manifest:           DummyManifest("Bucket", "test-resource-bucket-hash", "True", "True"),
+									Unstructured:       DummyManifest("Bucket", "test-resource-bucket-hash", "True", "True"),
 									latestEventMessage: "Synced bucket",
 								},
 								{
-									manifest:           DummyManifest("User", "test-resource-user-hash", "True", "True"),
+									Unstructured:       DummyManifest("User", "test-resource-user-hash", "True", "True"),
 									latestEventMessage: "User ready",
 								},
 							},

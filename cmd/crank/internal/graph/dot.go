@@ -37,7 +37,7 @@ func (p *DotGraph) buildGraph(g *dot.Graph, r Resource, fields []string) {
 	node.Label(resourceLabel(r, fields))
 	node.Attr("penwidth", "2")
 
-	for _, child := range r.Children {
+	for _, child := range r.children {
 		p.buildGraph(g, *child, fields)
 		g.Edge(node, g.Node(resourceID(*child)))
 	}
@@ -45,31 +45,30 @@ func (p *DotGraph) buildGraph(g *dot.Graph, r Resource, fields []string) {
 
 // Set individual resourceID for node
 func resourceID(r Resource) string {
-	name := r.manifest.GetName()
+	name := r.Unstructured.GetName()
 	if len(name) > 24 {
 		name = name[:12] + "..." + name[len(name)-12:]
 	}
-	kind := r.manifest.GetKind()
+	kind := r.Unstructured.GetKind()
 	return fmt.Sprintf("%s-%s", kind, name)
 }
 
 // This functions sets the label (the actual content) of the nodes in a graph.
 // Fields are defined by the fields string.
 func resourceLabel(r Resource, fields []string) string {
-
 	var label = make([]string, len(fields))
 	for i, field := range fields {
 		if field == "name" {
-			label[i] = field + ": " + r.manifest.GetName()
+			label[i] = field + ": " + r.Unstructured.GetName()
 		}
 		if field == "kind" {
-			label[i] = field + ": " + r.manifest.GetKind()
+			label[i] = field + ": " + r.Unstructured.GetKind()
 		}
 		if field == "namespace" {
-			label[i] = field + ": " + r.manifest.GetNamespace()
+			label[i] = field + ": " + r.Unstructured.GetNamespace()
 		}
 		if field == "apiversion" {
-			label[i] = field + ": " + r.manifest.GetAPIVersion()
+			label[i] = field + ": " + r.Unstructured.GetAPIVersion()
 		}
 		if field == "synced" {
 			label[i] = field + ": " + r.GetConditionStatus("Synced")

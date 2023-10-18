@@ -40,16 +40,16 @@ func (p *Tree) Print(w io.Writer, r Resource, fields []string) error {
 	var output = make([]string, len(fields))
 	for i, field := range fields {
 		if field == "name" {
-			output[i] = fmt.Sprintf("Name: %s", r.manifest.GetName())
+			output[i] = fmt.Sprintf("Name: %s", r.Unstructured.GetName())
 		}
 		if field == "kind" {
-			output[i] = fmt.Sprintf("Kind: %s", r.manifest.GetKind())
+			output[i] = fmt.Sprintf("Kind: %s", r.Unstructured.GetKind())
 		}
 		if field == "namespace" {
-			output[i] = fmt.Sprintf("Namespace: %s", r.manifest.GetNamespace())
+			output[i] = fmt.Sprintf("Namespace: %s", r.Unstructured.GetNamespace())
 		}
 		if field == "apiversion" {
-			output[i] = fmt.Sprintf("ApiVersion: %s", r.manifest.GetAPIVersion())
+			output[i] = fmt.Sprintf("ApiVersion: %s", r.Unstructured.GetAPIVersion())
 		}
 		if field == "synced" {
 			output[i] = fmt.Sprintf("Synced: %s", r.GetConditionStatus("Synced"))
@@ -69,10 +69,10 @@ func (p *Tree) Print(w io.Writer, r Resource, fields []string) error {
 		return err
 	}
 
-	for i, child := range r.Children {
+	for i, child := range r.children {
 		childPrinter := &Tree{
 			Indent: p.Indent,
-			IsLast: i == len(r.Children)-1,
+			IsLast: i == len(r.children)-1,
 		}
 		if child != nil {
 			err := childPrinter.Print(w, *child, fields)
