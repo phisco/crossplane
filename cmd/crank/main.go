@@ -25,6 +25,7 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
+	"github.com/crossplane/crossplane/cmd/crank/describe"
 	"github.com/crossplane/crossplane/cmd/crank/render"
 	"github.com/crossplane/crossplane/cmd/crank/xpkg"
 	"github.com/crossplane/crossplane/internal/version"
@@ -66,8 +67,8 @@ var cli struct {
 
 	Alpha struct {
 		// Add here alpha subcommands
-		Describe describeCmd `cmd:"" help:"Describe a Kubernetes Crossplane resource."`
-		Init     initCmd     `cmd:"" help:"Initialize directories for Crossplane packages from templates."`
+		Describe describe.Cmd `cmd:"" help:"Describe a Kubernetes Crossplane resource."`
+		Init     initCmd      `cmd:"" help:"Initialize directories for Crossplane packages from templates."`
 	} `cmd:"" help:"Alpha features. WARN: May be changed or removed without notice"`
 
 	Beta struct {

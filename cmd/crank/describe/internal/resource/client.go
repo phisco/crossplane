@@ -1,17 +1,28 @@
-// Package graph implements a Resource struct, that represents a Crossplane k8s resource (usually a claim or composite resource).
-// The package also contains helper methods and functions for the Resource struct.
-package graph
+/*
+Copyright 2023 The Crossplane Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package resource
 
 import (
-	"container/list"
 	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
@@ -19,8 +30,19 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
+	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/claim"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/composite"
+)
+
+const (
+	errCouldntGetRootResource         = "couldn't get root resource"
+	errCouldntGetChildResource        = "couldn't get child resource"
+	errCouldntGetRESTMapping          = "couldn't get REST mapping for resource"
+	errCouldntGetResource             = "couldn't get resource"
+	errCouldntGetEventForResource     = "couldn't get event for resource"
+	errCouldntGetEventListForResource = "couldn't get event list for resource"
+	errFmtResourceTypeNotFound        = "the server doesn't have a resource type %q"
 )
 
 // Client struct contains the following k8s client types:
@@ -32,89 +54,33 @@ type Client struct {
 	discoveryClient *discovery.DiscoveryClient
 }
 
-// Resource struct represents a kubernetes resource.
-type Resource struct {
-	unstructured.Unstructured
-	children           []*Resource
-	latestEventMessage string
-}
-
-// GetConditionStatus returns the Status of the map with the conditionType as string
-// This function takes a certain conditionType as input e.g. "Ready" or "Synced"
-func (r *Resource) GetConditionStatus(conditionKey string) string {
-	conditions, _, _ := unstructured.NestedSlice(r.Unstructured.Object, "status", "conditions")
-	for _, condition := range conditions {
-		conditionMap, ok := condition.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		conditionType, ok := conditionMap["type"].(string)
-		if !ok {
-			continue
-		}
-		conditionStatus, ok := conditionMap["status"].(string)
-		if !ok {
-			continue
-		}
-
-		if conditionType == conditionKey {
-			return conditionStatus
-		}
-	}
-	return ""
-}
-
-// GetConditionMessage returns the message as string if set under `status.conditions` in the manifest. Else return empty string
-func (r *Resource) GetConditionMessage() string {
-	conditions, _, _ := unstructured.NestedSlice(r.Unstructured.Object, "status", "conditions")
-
-	for _, item := range conditions {
-		if itemMap, ok := item.(map[string]interface{}); ok {
-			if message, exists := itemMap["message"]; exists {
-				if messageStr, ok := message.(string); ok {
-					return messageStr
-				}
-			}
-		}
-	}
-
-	return ""
-}
-
-// GetEvent returns the latest event of the resource as string
-func (r *Resource) GetEvent() string {
-	return r.latestEventMessage
-}
-
 // GetResourceTree returns the requested Resource and all its children.
 func (kc *Client) GetResourceTree(ctx context.Context, rootRef *v1.ObjectReference) (*Resource, error) {
 	// Get the root resource
 	root, err := kc.getResource(ctx, rootRef)
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't get root resource")
+		return nil, errors.Wrap(err, errCouldntGetRootResource)
 	}
 
 	// breadth-first search of children
-	queue := list.New()
+	queue := []*Resource{root}
 
-	queue.PushBack(root)
+	for len(queue) > 0 {
+		res := queue[0]   // Take the first element
+		queue = queue[1:] // Dequeue the first element
 
-	for queue.Len() > 0 {
-		child := queue.Front()
-		res := child.Value.(*Resource)
 		refs := getResourceChildrenRefs(res)
 		if err != nil {
-			return nil, errors.Wrap(err, "couldn't get root resource")
+			return nil, errors.Wrap(err, errCouldntGetRootResource)
 		}
 		for i := range refs {
 			child, err := kc.getResource(ctx, &refs[i])
 			if err != nil {
-				return nil, errors.Wrap(err, "couldn't get child resource")
+				return nil, errors.Wrap(err, errCouldntGetChildResource)
 			}
-			res.children = append(res.children, child)
-			queue.PushBack(child)
+			res.Children = append(res.Children, child)
+			queue = append(queue, child) // Enqueue child
 		}
-		_ = queue.Remove(child)
 	}
 
 	return root, nil
@@ -124,20 +90,20 @@ func (kc *Client) GetResourceTree(ctx context.Context, rootRef *v1.ObjectReferen
 func (kc *Client) getResource(ctx context.Context, ref *v1.ObjectReference) (*Resource, error) {
 	rm, err := kc.rmapper.RESTMapping(ref.GroupVersionKind().GroupKind(), ref.GroupVersionKind().Version)
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't get REST mapping for resource")
+		return nil, errors.Wrap(err, errCouldntGetRESTMapping)
 	}
 
 	result, err := kc.dynClient.Resource(rm.Resource).Namespace(ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't get resource")
+		return nil, errors.Wrap(err, errCouldntGetResource)
 	}
 	// Get event
-	event, err := kc.getLatestEventMessage(ctx, *ref)
+	event, err := kc.getLatestEvent(ctx, *ref)
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't get event for resource")
+		return nil, errors.Wrap(err, errCouldntGetEventForResource)
 	}
 
-	res := &Resource{Unstructured: *result, latestEventMessage: event}
+	res := &Resource{Unstructured: *result, LatestEvent: event}
 	return res, nil
 }
 
@@ -164,8 +130,8 @@ func getResourceChildrenRefs(r *Resource) []v1.ObjectReference {
 	return refs
 }
 
-// The getLatestEventMessage returns the message of the latest Event for the given resource.
-func (kc *Client) getLatestEventMessage(ctx context.Context, ref v1.ObjectReference) (string, error) {
+// The getLatestEvent returns the message of the latest Event for the given resource.
+func (kc *Client) getLatestEvent(ctx context.Context, ref v1.ObjectReference) (*v1.Event, error) {
 	// List events for the resource.
 	fieldSelector := fmt.Sprintf("involvedObject.name=%s,involvedObject.kind=%s,involvedObject.apiVersion=%s", ref.Name, ref.Kind, ref.APIVersion)
 	if ref.UID != "" {
@@ -175,15 +141,14 @@ func (kc *Client) getLatestEventMessage(ctx context.Context, ref v1.ObjectRefere
 		FieldSelector: fieldSelector,
 	})
 	if err != nil {
-		return "", errors.Wrap(err, "couldn't get event list for resource")
+		return nil, errors.Wrap(err, errCouldntGetEventListForResource)
 	}
 
 	// Check if there are any events.
 	if len(eventList.Items) == 0 {
-		return "", nil
+		return nil, nil
 	}
 
-	// TODO(phisco): check there is no smarter way, maybe checking what kubectl describe does
 	latestEvent := eventList.Items[0]
 	for _, event := range eventList.Items {
 		if event.LastTimestamp.After(latestEvent.LastTimestamp.Time) {
@@ -192,7 +157,7 @@ func (kc *Client) getLatestEventMessage(ctx context.Context, ref v1.ObjectRefere
 	}
 
 	// Get the latest event.
-	return latestEvent.Message, nil
+	return &latestEvent, nil
 }
 
 // MappingFor returns the RESTMapping for the given resource or kind argument.
@@ -228,7 +193,7 @@ func (kc *Client) MappingFor(resourceOrKindArg string) (*meta.RESTMapping, error
 		// if the error is _not_ a *meta.NoKindMatchError, then we had trouble doing discovery,
 		// so we should return the original error since it may help a user diagnose what is actually wrong
 		if meta.IsNoMatchError(err) {
-			return nil, fmt.Errorf("the server doesn't have a resource type %q", groupResource.Resource)
+			return nil, fmt.Errorf(errFmtResourceTypeNotFound, groupResource.Resource)
 		}
 		return nil, err
 	}
