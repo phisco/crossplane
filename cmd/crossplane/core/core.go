@@ -95,6 +95,8 @@ type startCommand struct {
 	CABundlePath   string `help:"Additional CA bundle to use when fetching packages from registry." env:"CA_BUNDLE_PATH"`
 	UserAgent      string `help:"The User-Agent header that will be set on all package requests." default:"${default_user_agent}" env:"USER_AGENT"`
 
+	PackageRuntime string `helm:"The package runtime to use for packages with a runtime (e.g. Providers and Functions)" default:"Deployment" env:"PACKAGE_RUNTIME"`
+
 	SyncInterval     time.Duration `short:"s" help:"How often all resources will be double-checked for drift from the desired state." default:"1h"`
 	PollInterval     time.Duration `help:"How often individual resources will be checked for drift from the desired state." default:"1m"`
 	MaxReconcileRate int           `help:"The global maximum rate per second at which resources may checked for drift from the desired state." default:"10"`
@@ -106,12 +108,13 @@ type startCommand struct {
 	TLSClientSecretName string `help:"The name of the TLS Secret that will be store Crossplane's client certificate." env:"TLS_CLIENT_SECRET_NAME"`
 	TLSClientCertsDir   string `help:"The path of the folder which will store TLS client certificate of Crossplane." env:"TLS_CLIENT_CERTS_DIR"`
 
-	EnableEnvironmentConfigs                 bool `group:"Alpha Features:" help:"Enable support for EnvironmentConfigs."`
-	EnableExternalSecretStores               bool `group:"Alpha Features:" help:"Enable support for External Secret Stores."`
-	EnableCompositionWebhookSchemaValidation bool `group:"Alpha Features:" help:"Enable support for Composition validation using schemas."`
-	EnableUsages                             bool `group:"Alpha Features:" help:"Enable support for deletion ordering and resource protection with Usages."`
+	EnableEnvironmentConfigs   bool `group:"Alpha Features:" help:"Enable support for EnvironmentConfigs."`
+	EnableExternalSecretStores bool `group:"Alpha Features:" help:"Enable support for External Secret Stores."`
+	EnableUsages               bool `group:"Alpha Features:" help:"Enable support for deletion ordering and resource protection with Usages."`
+	EnableRealtimeCompositions bool `group:"Alpha Features:" help:"Enable support for realtime compositions, i.e. watching composed resources and reconciling compositions immediately when any of the composed resources is updated."`
 
-	EnableCompositionFunctions bool `group:"Beta Features:" default:"true" help:"Enable support for Composition Functions."`
+	EnableCompositionFunctions               bool `group:"Beta Features:" default:"true" help:"Enable support for Composition Functions."`
+	EnableCompositionWebhookSchemaValidation bool `group:"Beta Features:" default:"true" help:"Enable support for Composition validation using schemas."`
 
 	// These are GA features that previously had alpha or beta feature flags.
 	// You can't turn off a GA feature. We maintain the flags to avoid breaking
@@ -269,6 +272,10 @@ func (c *startCommand) Run(s *runtime.Scheme, log logging.Logger) error { //noli
 			TLSConfig: tcfg,
 		}
 	}
+	if c.EnableRealtimeCompositions {
+		o.Features.Enable(features.EnableRealtimeCompositions)
+		log.Info("Alpha feature enabled", "flag", features.EnableRealtimeCompositions)
+	}
 
 	ao := apiextensionscontroller.Options{
 		Options:        o,
@@ -282,6 +289,17 @@ func (c *startCommand) Run(s *runtime.Scheme, log logging.Logger) error { //noli
 		return errors.Wrap(err, "cannot setup API extension controllers")
 	}
 
+	var pr pkgcontroller.PackageRuntime
+	switch c.PackageRuntime {
+	case string(pkgcontroller.PackageRuntimeDeployment):
+		pr = pkgcontroller.PackageRuntimeDeployment
+	case string(pkgcontroller.PackageRuntimeExternal):
+		pr = pkgcontroller.PackageRuntimeExternal
+	default:
+		return errors.Errorf("unsupported package runtime %q, supported runtimes are %q and %q",
+			c.PackageRuntime, pkgcontroller.PackageRuntimeDeployment, pkgcontroller.PackageRuntimeExternal)
+	}
+
 	po := pkgcontroller.Options{
 		Options:         o,
 		Cache:           xpkg.NewFsPackageCache(c.CacheDir, afero.NewOsFs()),
@@ -289,6 +307,7 @@ func (c *startCommand) Run(s *runtime.Scheme, log logging.Logger) error { //noli
 		ServiceAccount:  c.ServiceAccount,
 		DefaultRegistry: c.Registry,
 		FetcherOptions:  []xpkg.FetcherOpt{xpkg.WithUserAgent(c.UserAgent)},
+		PackageRuntime:  pr,
 	}
 
 	if c.CABundlePath != "" {

@@ -30,7 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
@@ -155,7 +155,7 @@ func (e *APIEstablisher) ReleaseObjects(ctx context.Context, parent v1.PackageRe
 		ors := u.GetOwnerReferences()
 		for i := range ors {
 			if ors[i].UID == parent.GetUID() {
-				ors[i].Controller = pointer.Bool(false)
+				ors[i].Controller = ptr.To(false)
 				break
 			}
 			// Note(turkenh): What if we cannot find our UID in the owner
@@ -195,17 +195,20 @@ func (e *APIEstablisher) addLabels(objs []runtime.Object, parent v1.PackageRevis
 
 func (e *APIEstablisher) validate(ctx context.Context, objs []runtime.Object, parent v1.PackageRevision, control bool) ([]currentDesired, error) { //nolint:gocyclo // TODO(negz): Refactor this to break up complexity.
 	var webhookTLSCert []byte
-	if tlsServerSecretName := parent.GetTLSServerSecretName(); tlsServerSecretName != nil {
-		s := &corev1.Secret{}
-		nn := types.NamespacedName{Name: *tlsServerSecretName, Namespace: e.namespace}
-		if err := e.client.Get(ctx, nn, s); err != nil {
-			return nil, errors.Wrap(err, errGetWebhookTLSSecret)
+	if parentWithRuntime, ok := parent.(v1.PackageRevisionWithRuntime); ok {
+		if tlsServerSecretName := parentWithRuntime.GetTLSServerSecretName(); tlsServerSecretName != nil {
+			s := &corev1.Secret{}
+			nn := types.NamespacedName{Name: *tlsServerSecretName, Namespace: e.namespace}
+			if err := e.client.Get(ctx, nn, s); err != nil {
+				return nil, errors.Wrap(err, errGetWebhookTLSSecret)
+			}
+			if len(s.Data["tls.crt"]) == 0 {
+				return nil, errors.New(errWebhookSecretWithoutCABundle)
+			}
+			webhookTLSCert = s.Data["tls.crt"]
 		}
-		if len(s.Data["tls.crt"]) == 0 {
-			return nil, errors.New(errWebhookSecretWithoutCABundle)
-		}
-		webhookTLSCert = s.Data["tls.crt"]
 	}
+
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(maxConcurrentEstablishers)
 	out := make(chan currentDesired, len(objs))
@@ -240,7 +243,7 @@ func (e *APIEstablisher) validate(ctx context.Context, objs []runtime.Object, pa
 					}
 					conf.Webhooks[i].ClientConfig.Service.Name = parent.GetLabels()[v1.LabelParentPackage]
 					conf.Webhooks[i].ClientConfig.Service.Namespace = e.namespace
-					conf.Webhooks[i].ClientConfig.Service.Port = pointer.Int32(servicePort)
+					conf.Webhooks[i].ClientConfig.Service.Port = ptr.To[int32](servicePort)
 				}
 			case *admv1.MutatingWebhookConfiguration:
 				if len(webhookTLSCert) == 0 {
@@ -256,7 +259,7 @@ func (e *APIEstablisher) validate(ctx context.Context, objs []runtime.Object, pa
 					}
 					conf.Webhooks[i].ClientConfig.Service.Name = parent.GetLabels()[v1.LabelParentPackage]
 					conf.Webhooks[i].ClientConfig.Service.Namespace = e.namespace
-					conf.Webhooks[i].ClientConfig.Service.Port = pointer.Int32(servicePort)
+					conf.Webhooks[i].ClientConfig.Service.Port = ptr.To[int32](servicePort)
 				}
 			case *extv1.CustomResourceDefinition:
 				if conf.Spec.Conversion != nil && conf.Spec.Conversion.Strategy == extv1.WebhookConverter {
@@ -275,7 +278,7 @@ func (e *APIEstablisher) validate(ctx context.Context, objs []runtime.Object, pa
 					conf.Spec.Conversion.Webhook.ClientConfig.CABundle = webhookTLSCert
 					conf.Spec.Conversion.Webhook.ClientConfig.Service.Name = parent.GetName()
 					conf.Spec.Conversion.Webhook.ClientConfig.Service.Namespace = e.namespace
-					conf.Spec.Conversion.Webhook.ClientConfig.Service.Port = pointer.Int32(servicePort)
+					conf.Spec.Conversion.Webhook.ClientConfig.Service.Port = ptr.To[int32](servicePort)
 				}
 			}
 
@@ -389,7 +392,7 @@ func (e *APIEstablisher) create(ctx context.Context, obj resource.Object, parent
 	// get deleted when the new revision doesn't include it in order not to lose
 	// user data, such as custom resources of an old CRD.
 	if pkgRef, ok := GetPackageOwnerReference(parent); ok {
-		pkgRef.Controller = pointer.Bool(false)
+		pkgRef.Controller = ptr.To(false)
 		refs = append(refs, pkgRef)
 	}
 	// Overwrite any owner references on the desired object.
@@ -402,7 +405,7 @@ func (e *APIEstablisher) update(ctx context.Context, current, desired resource.O
 	// get deleted when the new revision doesn't include it in order not to lose
 	// user data, such as custom resources of an old CRD.
 	if pkgRef, ok := GetPackageOwnerReference(parent); ok {
-		pkgRef.Controller = pointer.Bool(false)
+		pkgRef.Controller = ptr.To(false)
 		meta.AddOwnerReference(current, pkgRef)
 	}
 

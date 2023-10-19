@@ -29,6 +29,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
 	"github.com/crossplane/crossplane/internal/xpkg"
+	"github.com/crossplane/crossplane/internal/xpkg/upbound/credhelper"
 )
 
 const (
@@ -36,11 +37,14 @@ const (
 	errFindPackageinWd = "failed to find a package in current working directory"
 )
 
+// DefaultRegistry for pushing Crossplane packages.
+const DefaultRegistry = "xpkg.upbound.io"
+
 // pushCmd pushes a package.
 type pushCmd struct {
 	fs afero.Fs
 
-	Tag     string `arg:"" help:"Tag of the package to be pushed. Must be a valid OCI image tag."`
+	Tag     string `arg:"" help:"Tag of the package to be pushed. Must be a valid OCI image tag. Unqualified tags will be pushed to xpkg.upbound.io."`
 	Package string `short:"f" help:"Path to package. If not specified and only one package exists in current directory it will be used."`
 }
 
@@ -53,7 +57,7 @@ func (c *pushCmd) AfterApply() error {
 // Run runs the push cmd.
 func (c *pushCmd) Run(logger logging.Logger) error {
 	logger = logger.WithValues("tag", c.Tag)
-	tag, err := name.NewTag(c.Tag)
+	tag, err := name.NewTag(c.Tag, name.WithDefaultRegistry(DefaultRegistry))
 	if err != nil {
 		logger.Debug("Failed to create tag for package", "error", err)
 		return err
@@ -81,7 +85,11 @@ func (c *pushCmd) Run(logger logging.Logger) error {
 		logger.Debug("Failed to create image from package tarball", "error", err)
 		return err
 	}
-	if err := remote.Write(tag, img, remote.WithAuthFromKeychain(authn.DefaultKeychain)); err != nil {
+	kc := authn.NewMultiKeychain(
+		authn.NewKeychainFromHelper(credhelper.New()),
+		authn.DefaultKeychain,
+	)
+	if err := remote.Write(tag, img, remote.WithAuthFromKeychain(kc)); err != nil {
 		logger.Debug("Failed to push created image to remote location", "error", err)
 		return err
 	}

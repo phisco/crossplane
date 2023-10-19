@@ -27,7 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -394,19 +394,24 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	pr.SetPackagePullSecrets(p.GetPackagePullSecrets())
 	pr.SetIgnoreCrossplaneConstraints(p.GetIgnoreCrossplaneConstraints())
 	pr.SetSkipDependencyResolution(p.GetSkipDependencyResolution())
-	pr.SetControllerConfigRef(p.GetControllerConfigRef())
-	pr.SetTLSServerSecretName(p.GetTLSServerSecretName())
-	pr.SetTLSClientSecretName(p.GetTLSClientSecretName())
 	pr.SetCommonLabels(p.GetCommonLabels())
 
-	// If current revision is not active and we have an automatic or
+	if pwr, ok := p.(v1.PackageWithRuntime); ok {
+		pwrr := pr.(v1.PackageRevisionWithRuntime)
+		pwrr.SetRuntimeConfigRef(pwr.GetRuntimeConfigRef())
+		pwrr.SetControllerConfigRef(pwr.GetControllerConfigRef())
+		pwrr.SetTLSServerSecretName(pwr.GetTLSServerSecretName())
+		pwrr.SetTLSClientSecretName(pwr.GetTLSClientSecretName())
+	}
+
+	// If current revision is not active, and we have an automatic or
 	// undefined activation policy, always activate.
 	if pr.GetDesiredState() != v1.PackageRevisionActive && (p.GetActivationPolicy() == nil || *p.GetActivationPolicy() == v1.AutomaticActivation) {
 		pr.SetDesiredState(v1.PackageRevisionActive)
 	}
 
 	controlRef := meta.AsController(meta.TypedReferenceTo(p, p.GetObjectKind().GroupVersionKind()))
-	controlRef.BlockOwnerDeletion = pointer.Bool(true)
+	controlRef.BlockOwnerDeletion = ptr.To(true)
 	meta.AddOwnerReference(pr, controlRef)
 	if err := r.client.Apply(ctx, pr, resource.MustBeControllableBy(p.GetUID())); err != nil {
 		if kerrors.IsConflict(err) {
