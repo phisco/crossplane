@@ -16,7 +16,7 @@ jobs:
     if: github.repository == 'crossplane/crossplane'
     steps:
       - name: Checkout
-        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
         with:
           submodules: true
           fetch-depth: 0
@@ -48,7 +48,7 @@ jobs:
     if: github.repository == 'crossplane/crossplane'
     steps:
       - name: Checkout
-        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
         with:
           submodules: true
           fetch-depth: 0
@@ -78,7 +78,7 @@ jobs:
     if: github.repository == 'crossplane/crossplane'
     steps:
       - name: Checkout
-        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
         with:
           submodules: true
           fetch-depth: 0
@@ -108,7 +108,7 @@ jobs:
     if: github.repository == 'crossplane/crossplane'
     steps:
       - name: Checkout
-        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
         with:
           submodules: true
           fetch-depth: 0
