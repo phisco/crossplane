@@ -390,9 +390,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		}
 	}
 
-	if pr.GetCondition(v1.TypeHealthy).Status == corev1.ConditionTrue {
-		p.SetConditions(v1.Healthy())
+	// TODO(phisco): refactor these conditions to make it clearer
+	if pr.GetCondition(v1.TypeHealthy).Status == corev1.ConditionTrue && p.GetCondition(v1.TypeHealthy).Status != corev1.ConditionTrue {
+		// NOTE(phisco): We don't want to spam the user with events if the
+		// package is already healthy, nor update the condition last transition
+		// time if it didn't actually change.
 		r.record.Event(p, event.Normal(reasonInstall, "Successfully installed package revision"))
+		p.SetConditions(v1.Healthy())
 	}
 	if prHealthy := pr.GetCondition(v1.TypeHealthy); prHealthy.Status == corev1.ConditionFalse {
 		p.SetConditions(v1.Unhealthy().WithMessage(prHealthy.Message))
