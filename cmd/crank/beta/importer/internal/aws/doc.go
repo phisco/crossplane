@@ -27,5 +27,5 @@ var fs embed.FS
 
 // GetTemplates get the templates for AWS resources.
 func GetTemplates() (*template.Template, error) {
-	return template.ParseFS(fs)
+	return template.ParseFS(fs, "templates/*")
 }

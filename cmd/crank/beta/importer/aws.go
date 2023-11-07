@@ -138,6 +138,7 @@ func (c *awsCmd) Run(k *kong.Context, _ logging.Logger) error {
 			tmplName,
 			map[string]interface{}{
 				"Object": resource,
+				"Region": c.Region,
 			}); err != nil {
 			return errors.Wrapf(err, "unable to render template: %s", tmplName)
 		}

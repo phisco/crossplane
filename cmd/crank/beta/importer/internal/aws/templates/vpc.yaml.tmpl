@@ -1,4 +1,10 @@
-apiVersion: ec2.aws.crossplane.io/v1beta1
+apiVersion: ec2.aws.upbound.io/v1beta1
 kind: VPC
 metadata:
-  {{- .Object }}
+  name: {{ .Object.VpcId }}
+  annotations:
+    crossplane.io/external-name: "{{ .Object.VpcId }}"
+spec:
+    managementPolicies: ["Observe"]
+    forProvider:
+        region: "{{ .Region }}"
