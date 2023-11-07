@@ -16,3 +16,16 @@ limitations under the License.
 
 // Package aws contains functionality to import AWS resources.
 package aws
+
+import (
+	"embed"
+	"text/template"
+)
+
+//go:embed templates
+var fs embed.FS
+
+// GetTemplates get the templates for AWS resources.
+func GetTemplates() (*template.Template, error) {
+	return template.ParseFS(fs)
+}

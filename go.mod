@@ -7,6 +7,7 @@ require (
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24
 	github.com/Masterminds/semver v1.5.0
 	github.com/alecthomas/kong v0.8.1
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.130.0
 	github.com/bufbuild/buf v1.27.2
 	github.com/crossplane/crossplane-runtime v1.15.0-rc.0
 	github.com/docker/docker v24.0.7+incompatible
@@ -95,20 +96,20 @@ require (
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
-	github.com/aws/aws-sdk-go-v2 v1.18.0 // indirect
-	github.com/aws/aws-sdk-go-v2/config v1.18.25 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.13.24 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.13.3 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.33 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.4.27 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/ini v1.3.34 // indirect
+	github.com/aws/aws-sdk-go-v2 v1.22.1 // indirect
+	github.com/aws/aws-sdk-go-v2/config v1.22.1
+	github.com/aws/aws-sdk-go-v2/credentials v1.15.1 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.14.2 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.2.1 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.5.1 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/ini v1.5.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.18.11 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ecrpublic v1.16.2 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.9.27 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.12.10 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.14.10 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.19.0 // indirect
-	github.com/aws/smithy-go v1.13.5 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.10.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.17.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.19.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.25.0 // indirect
+	github.com/aws/smithy-go v1.16.0 // indirect
 	github.com/awslabs/amazon-ecr-credential-helper/ecr-login v0.0.0-20230510185313-f5e39e5f34c7 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bufbuild/protocompile v0.6.0 // indirect
