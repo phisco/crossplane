@@ -26,6 +26,6 @@ type Cmd struct {
 
 // Flags contains the flags to be embedded by all the provider-specific subcommands.
 type Flags struct {
-	Output    string   `help:"Output path for imported resources' YAML manifests." short:"o" type:"path"`
+	Output    string   `help:"Output path for imported resources' YAML manifests." short:"o" type:"path" default:"-"`
 	Resources []string `help:"Comma-separated list of cloud resources to import." short:"r" required:""`
 }
