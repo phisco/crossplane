@@ -77,8 +77,12 @@ spec:
                 - name
                 type: object
               desiredState:
+                default: Inactive
                 description: DesiredState of the PackageRevision. Can be either Active
                   or Inactive.
+                enum:
+                - Active
+                - Inactive
                 type: string
               ignoreCrossplaneConstraints:
                 default: false

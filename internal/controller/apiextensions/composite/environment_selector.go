@@ -202,7 +202,7 @@ func sortConfigs(ec []v1alpha1.EnvironmentConfig, f string) error { //nolint:goc
 		}
 
 		// check only vt1 as vt1 == vt2
-		switch vt { //nolint:exhaustive // we only support these types
+		switch vt {
 		case reflect.String, reflect.Int64, reflect.Float64:
 			// ok
 		default:
@@ -223,7 +223,7 @@ func sortConfigs(ec []v1alpha1.EnvironmentConfig, f string) error { //nolint:goc
 	var err error
 	sort.Slice(p, func(i, j int) bool {
 		vali, valj := p[i].val, p[j].val
-		switch valsKind { //nolint:exhaustive // we only support these types
+		switch valsKind {
 		case reflect.Float64:
 			return vali.(float64) < valj.(float64)
 		case reflect.Int64:

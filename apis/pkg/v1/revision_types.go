@@ -37,6 +37,8 @@ const (
 // PackageRevisionSpec specifies the desired state of a PackageRevision.
 type PackageRevisionSpec struct {
 	// DesiredState of the PackageRevision. Can be either Active or Inactive.
+	// +kubebuilder:validation:Enum=Active;Inactive
+	// +kubebuilder:default=Inactive
 	DesiredState PackageRevisionDesiredState `json:"desiredState"`
 
 	// Package image used by install Pod to extract package contents.

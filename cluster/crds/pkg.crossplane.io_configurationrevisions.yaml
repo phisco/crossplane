@@ -66,8 +66,12 @@ spec:
                   replication controllers and services. More info: http://kubernetes.io/docs/user-guide/labels'
                 type: object
               desiredState:
+                default: Inactive
                 description: DesiredState of the PackageRevision. Can be either Active
                   or Inactive.
+                enum:
+                - Active
+                - Inactive
                 type: string
               ignoreCrossplaneConstraints:
                 default: false
