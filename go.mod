@@ -33,7 +33,7 @@ require (
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20210715213245-6c3934b029d8
 	github.com/google/uuid v1.3.0
 	golang.org/x/sys v0.8.0
-	google.golang.org/grpc v1.55.0
+	google.golang.org/grpc v1.56.3
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0
 	google.golang.org/protobuf v1.30.0
 	kernel.org/pub/linux/libs/security/libcap/cap v1.2.66
