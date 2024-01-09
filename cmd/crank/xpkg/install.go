@@ -179,7 +179,7 @@ func (c *installCmd) Run(k *kong.Context, logger logging.Logger) error { //nolin
 	if c.Wait > 0 {
 		// Poll every 2 seconds to see whether the package is ready.
 		logger.Debug("Waiting for package to be ready", "timeout", timeout)
-		wait.UntilWithContext(ctx, func(ctx context.Context) {
+		go wait.UntilWithContext(ctx, func(ctx context.Context) {
 			if err := kube.Get(ctx, client.ObjectKeyFromObject(pkg), pkg); err != nil {
 				logger.Debug("Cannot get package", "error", err)
 				return
@@ -194,6 +194,13 @@ func (c *installCmd) Run(k *kong.Context, logger logging.Logger) error { //nolin
 
 			logger.Debug("Package is not yet ready")
 		}, 2*time.Second)
+
+		<-ctx.Done()
+
+		if err := ctx.Err(); errors.Is(err, context.DeadlineExceeded) {
+			return errors.Wrap(err, "Package did not become ready")
+		}
+
 	}
 
 	_, err = fmt.Fprintf(k.Stdout, "%s/%s created\n", c.Kind, pkg.GetName())
