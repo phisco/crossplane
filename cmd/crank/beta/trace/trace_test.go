@@ -97,13 +97,13 @@ func TestCmd_getResourceAndName(t *testing.T) {
 			}
 			gotResource, gotName, err := c.getResourceAndName()
 			if diff := cmp.Diff(tt.want.err, err, test.EquateErrors()); diff != "" {
-				t.Errorf("Cmd.getResourceAndName() error = %v, wantErr %v", err, tt.want.err)
+				t.Errorf("%s\nCmd.getResourceAndName(): -want error, +got error:\n%s", tt.reason, diff)
 			}
 			if diff := cmp.Diff(tt.want.resource, gotResource); diff != "" {
-				t.Errorf("Cmd.getResourceAndName() resource = %v, want %v", gotResource, tt.want.resource)
+				t.Errorf("%s\nCmd.getResourceAndName(): -want resource, +got resource:\n%s", tt.reason, diff)
 			}
 			if diff := cmp.Diff(tt.want.name, gotName); diff != "" {
-				t.Errorf("Cmd.getResourceAndName() name = %v, want %v", gotName, tt.want.name)
+				t.Errorf("%s\nCmd.getResourceAndName(): -want name, +got name:\n%s", tt.reason, diff)
 			}
 		})
 	}
