@@ -55,18 +55,33 @@ type DependencyManager interface {
 
 // PackageDependencyManager is a resolver for packages.
 type PackageDependencyManager struct {
-	client      client.Client
-	newDag      dag.NewDAGFn
-	packageType v1beta1.PackageType
+	client          client.Client
+	newDag          dag.NewDAGFn
+	packageType     v1beta1.PackageType
+	defaultRegistry string
+}
+
+// A PackageDependencyManagerOption sets configuration for a PackageDependencyManager.
+type PackageDependencyManagerOption func(*PackageDependencyManager)
+
+// PackageDependencyManagerWithDefaultRegistry sets the default registry for the PackageDependencyManager.
+func PackageDependencyManagerWithDefaultRegistry(r string) PackageDependencyManagerOption {
+	return func(m *PackageDependencyManager) {
+		m.defaultRegistry = r
+	}
 }
 
 // NewPackageDependencyManager creates a new PackageDependencyManager.
-func NewPackageDependencyManager(c client.Client, nd dag.NewDAGFn, t v1beta1.PackageType) *PackageDependencyManager {
-	return &PackageDependencyManager{
+func NewPackageDependencyManager(c client.Client, nd dag.NewDAGFn, t v1beta1.PackageType, opts ...PackageDependencyManagerOption) *PackageDependencyManager {
+	m := &PackageDependencyManager{
 		client:      c,
 		newDag:      nd,
 		packageType: t,
 	}
+	for _, o := range opts {
+		o(m)
+	}
+	return m
 }
 
 // Resolve resolves package dependencies.
@@ -96,6 +111,11 @@ func (m *PackageDependencyManager) Resolve(ctx context.Context, pkg runtime.Obje
 			pdep.Package = *dep.Function
 			pdep.Type = v1beta1.FunctionPackageType
 		}
+		// add the default registry to the package if needed
+		ref, err := name.ParseReference(pdep.Package, name.WithDefaultRegistry(m.defaultRegistry))
+		if err == nil {
+			pdep.Package = ref.Context().Name()
+		}
 		pdep.Constraints = dep.Version
 		sources[i] = pdep
 	}
@@ -113,7 +133,7 @@ func (m *PackageDependencyManager) Resolve(ctx context.Context, pkg runtime.Obje
 		return found, installed, invalid, errors.Wrap(err, errGetOrCreateLock)
 	}
 
-	prRef, err := name.ParseReference(pr.GetSource(), name.WithDefaultRegistry(""))
+	prRef, err := name.ParseReference(pr.GetSource(), name.WithDefaultRegistry(m.defaultRegistry))
 	if err != nil {
 		return found, installed, invalid, err
 	}

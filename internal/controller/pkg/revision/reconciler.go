@@ -307,7 +307,8 @@ func SetupProviderRevision(mgr ctrl.Manager, o controller.Options) error {
 
 	ro := []ReconcilerOption{
 		WithCache(o.Cache),
-		WithDependencyManager(NewPackageDependencyManager(mgr.GetClient(), dag.NewMapDag, v1beta1.ProviderPackageType)),
+		WithDependencyManager(NewPackageDependencyManager(mgr.GetClient(), dag.NewMapDag, v1beta1.ProviderPackageType,
+			PackageDependencyManagerWithDefaultRegistry(o.DefaultRegistry))),
 		WithEstablisher(NewAPIEstablisher(mgr.GetClient(), o.Namespace)),
 		WithNewPackageRevisionFn(nr),
 		WithParser(parser.New(metaScheme, objScheme)),
@@ -359,7 +360,8 @@ func SetupConfigurationRevision(mgr ctrl.Manager, o controller.Options) error {
 
 	r := NewReconciler(mgr,
 		WithCache(o.Cache),
-		WithDependencyManager(NewPackageDependencyManager(mgr.GetClient(), dag.NewMapDag, v1beta1.ConfigurationPackageType)),
+		WithDependencyManager(NewPackageDependencyManager(mgr.GetClient(), dag.NewMapDag, v1beta1.ConfigurationPackageType,
+			PackageDependencyManagerWithDefaultRegistry(o.DefaultRegistry))),
 		WithNewPackageRevisionFn(nr),
 		WithEstablisher(NewAPIEstablisher(mgr.GetClient(), o.Namespace)),
 		WithParser(parser.New(metaScheme, objScheme)),
@@ -415,7 +417,8 @@ func SetupFunctionRevision(mgr ctrl.Manager, o controller.Options) error {
 
 	ro := []ReconcilerOption{
 		WithCache(o.Cache),
-		WithDependencyManager(NewPackageDependencyManager(mgr.GetClient(), dag.NewMapDag, v1beta1.FunctionPackageType)),
+		WithDependencyManager(NewPackageDependencyManager(mgr.GetClient(), dag.NewMapDag, v1beta1.FunctionPackageType,
+			PackageDependencyManagerWithDefaultRegistry(o.DefaultRegistry))),
 		WithEstablisher(NewAPIEstablisher(mgr.GetClient(), o.Namespace)),
 		WithNewPackageRevisionFn(nr),
 		WithParser(parser.New(metaScheme, objScheme)),
