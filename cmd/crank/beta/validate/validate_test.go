@@ -20,12 +20,12 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
 
-	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 )
 
@@ -58,6 +58,12 @@ var (
 							Properties: map[string]extv1.JSONSchemaProps{
 								"spec": {
 									Type: "object",
+									XValidations: extv1.ValidationRules{
+										{
+											Rule:    "self.replicas > 1",
+											Message: "Replicas must be greater than 1",
+										},
+									},
 									Properties: map[string]extv1.JSONSchemaProps{
 										"replicas": {
 											Type: "integer",
@@ -121,6 +127,12 @@ func TestConvertToCRDs(t *testing.T) {
 												"properties": map[string]interface{}{
 													"spec": map[string]interface{}{
 														"type": "object",
+														"x-kubernetes-validations": []interface{}{
+															map[string]interface{}{
+																"rule":    "self.replicas > 1",
+																"message": "Replicas must be greater than 1",
+															},
+														},
 														"properties": map[string]interface{}{
 															"replicas": map[string]interface{}{
 																"type": "integer",
@@ -1133,7 +1145,7 @@ func TestValidateResources(t *testing.T) {
 								"name": "test",
 							},
 							"spec": map[string]interface{}{
-								"replicas": 1,
+								"replicas": 2,
 							},
 						},
 					},
@@ -1165,7 +1177,32 @@ func TestValidateResources(t *testing.T) {
 				},
 			},
 			want: want{
-				err: errors.New("could not validate all resources"),
+				err: cmpopts.AnyError,
+			},
+		},
+		"InvalidCEL": {
+			reason: "Should return an error if the resources are invalid because of a CEL rule",
+			args: args{
+				resources: []*unstructured.Unstructured{
+					{
+						Object: map[string]interface{}{
+							"apiVersion": "test.org/v1alpha1",
+							"kind":       "Test",
+							"metadata": map[string]interface{}{
+								"name": "test",
+							},
+							"spec": map[string]interface{}{
+								"replicas": 1,
+							},
+						},
+					},
+				},
+				crds: []*extv1.CustomResourceDefinition{
+					testCRD,
+				},
+			},
+			want: want{
+				err: cmpopts.AnyError,
 			},
 		},
 		"MissingCRD": {
@@ -1193,7 +1230,7 @@ func TestValidateResources(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := SchemaValidation(tc.args.resources, tc.args.crds, false)
 
-			if diff := cmp.Diff(tc.want.err, got, test.EquateErrors()); diff != "" {
+			if diff := cmp.Diff(tc.want.err, got, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("%s\nvalidateResources(...): -want error, +got error:\n%s", tc.reason, diff)
 			}
 		})

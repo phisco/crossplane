@@ -19,7 +19,7 @@ package validate
 import (
 	"context"
 	"fmt"
-	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
+
 	ext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
@@ -46,51 +46,39 @@ func newValidatorsAndStructurals(crds []*extv1.CustomResourceDefinition) (map[ru
 
 		// Top-level and per-version schemas are mutually exclusive.
 		for _, ver := range internal.Spec.Versions {
-			var sv validation.SchemaValidator
-			var err error
-
 			gvk := runtimeschema.GroupVersionKind{
 				Group:   internal.Spec.Group,
 				Version: ver.Name,
 				Kind:    internal.Spec.Names.Kind,
 			}
 
-			// Version specific validation rules
-			if ver.Schema != nil && ver.Schema.OpenAPIV3Schema != nil {
-				sv, _, err = validation.NewSchemaValidator(ver.Schema.OpenAPIV3Schema)
-				if err != nil {
-					return nil, nil, err
-				}
-
-				validators[gvk] = append(validators[gvk], &sv)
-
-				structural, err := schema.NewStructural(ver.Schema.OpenAPIV3Schema)
-				if err != nil {
-					return nil, nil, err
-				}
-
-				structurals[gvk] = structural
-
-				break
-			}
-
 			// Top level validation rules
-			if internal.Spec.Validation != nil {
-				sv, _, err = validation.NewSchemaValidator(internal.Spec.Validation.OpenAPIV3Schema)
-				if err != nil {
-					return nil, nil, err
-				}
-
-				validators[gvk] = append(validators[gvk], &sv)
-
-				structural, err := schema.NewStructural(internal.Spec.Validation.OpenAPIV3Schema)
-				if err != nil {
-					return nil, nil, err
-				}
-
-				structurals[gvk] = structural
+			var s *ext.JSONSchemaProps
+			switch {
+			case internal.Spec.Validation != nil:
+				s = internal.Spec.Validation.OpenAPIV3Schema
+			case ver.Schema != nil && ver.Schema.OpenAPIV3Schema != nil:
+				s = ver.Schema.OpenAPIV3Schema
+			default:
+				// TODO log a warning here, it should never happen
+				continue
 			}
+			sv, _, err := validation.NewSchemaValidator(s)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			structural, err := schema.NewStructural(s)
+			if err != nil {
+				return nil, nil, err
+			}
+			if err != nil {
+				return nil, nil, err
+			}
+			validators[gvk] = append(validators[gvk], &sv)
+			structurals[gvk] = structural
 		}
+
 	}
 
 	return validators, structurals, nil
@@ -124,12 +112,9 @@ func SchemaValidation(resources []*unstructured.Unstructured, crds []*extv1.Cust
 			}
 		}
 
-		s, _ := structurals[gvk]
-		spec, _ := fieldpath.Pave(resources[i].Object).GetValue("spec")
-		res := map[string]interface{}{"spec": spec}
-
-		celValidator := cel.NewValidator(s, false, celconfig.RuntimeCELCostBudget)
-		re, _ := celValidator.Validate(context.TODO(), nil, s, res, nil, celconfig.RuntimeCELCostBudget)
+		s := structurals[gvk]
+		celValidator := cel.NewValidator(s, true, celconfig.RuntimeCELCostBudget)
+		re, _ := celValidator.Validate(context.TODO(), nil, s, resources[i].Object, nil, celconfig.RuntimeCELCostBudget)
 		for _, e := range re {
 			rf++
 			fmt.Printf("[x] CEL validation error %s, %s : %s\n", r.GroupVersionKind().String(), r.GetAnnotations()[composite.AnnotationKeyCompositionResourceName], e.Error())
