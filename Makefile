@@ -92,7 +92,10 @@ crds.clean:
 	@find $(CRD_DIR) -name '*.yaml.sed' -delete || $(FAIL)
 	@$(OK) cleaned generated CRDs
 
-generate.run: gen-kustomize-crds gen-chart-license
+generate.run: env.print gen-kustomize-crds gen-chart-license
+
+env.print:
+	env
 
 gen-chart-license:
 	@cp -f LICENSE cluster/charts/crossplane/LICENSE
