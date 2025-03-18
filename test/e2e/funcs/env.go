@@ -105,7 +105,7 @@ func EnvFuncs(fns ...env.Func) env.Func {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		for _, fn := range fns {
 			var err error
-			ctx, err = fn(ctx, c)
+			ctx, err := fn(ctx, c)
 			if err != nil {
 				return ctx, err
 			}

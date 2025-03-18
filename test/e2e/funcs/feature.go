@@ -72,7 +72,7 @@ func AllOf(fns ...features.Func) features.Func {
 		t.Helper()
 
 		for _, fn := range fns {
-			ctx = fn(ctx, t, c)
+			ctx := fn(ctx, t, c)
 		}
 		return ctx
 	}
@@ -476,7 +476,7 @@ func ApplyClaim(manager, dir, cm string, options ...decoder.DecodeOption) featur
 		// TODO(negz): Only two functions seem to read this key. Either adopt it
 		// everywhere it would be relevant, or drop it.
 		f := func(o k8s.Object) {
-			ctx = context.WithValue(ctx, claimCtxKey{}, &claim.Unstructured{Unstructured: *asUnstructured(o)})
+			ctx := context.WithValue(ctx, claimCtxKey{}, &claim.Unstructured{Unstructured: *asUnstructured(o)})
 		}
 		if err := decoder.DecodeEachFile(ctx, dfs, cm, ApplyHandler(c.Client().Resources(), manager, f)); err != nil {
 			t.Fatal(err)
