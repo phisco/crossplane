@@ -36,9 +36,10 @@ let
 
       CGO_ENABLED = "0";
       doCheck = false;
+      dontStrip = true;
 
       preBuild = ''
-        ldflags="-s -w -X=github.com/crossplane/crossplane-runtime/v2/pkg/version.version=${version}"
+        ldflags="-X=github.com/crossplane/crossplane-runtime/v2/pkg/version.version=${version}"
       '';
 
       postInstall = ''
